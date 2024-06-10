@@ -1,5 +1,16 @@
 # Soundness
 
+We prove soundness of Thorin (The Higher ORder INtermediate representation) by proving progress and preservation properties.
+
+Axioms and normalization are handled before code generation, and thus, are not included in Thorin's runtime system.
+
+In a second step, we show type preservation of normalization ensuring its soundness.
+Furthermore, this approach validates the usage of any type preservation axioms.
+
+## Technicalities
+
+We use named unique variables building and make use of the autosubst library for handling substitutions.
+
 
 ## References
 
