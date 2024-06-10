@@ -11,6 +11,10 @@ Furthermore, this approach validates the usage of any type preservation axioms.
 
 We use named unique variables building and make use of the autosubst library for handling substitutions.
 
+Libraries:
+- [coq-autosubst](https://github.com/coq-community/autosubst)
+- coq-iris (and stdpp)
+
 
 ## References
 

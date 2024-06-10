@@ -1,0 +1,32 @@
+-Q lib thorin.lib
+-Q semantics thorin
+# we sometimes want to locally override notation, and there is no good way to do that with scopes.
+-arg -w -arg -notation-overridden
+# cannot use non-canonical projections as it causes massive unification failures
+# (https://github.com/coq/coq/issues/6294).
+-arg -w -arg -redundant-canonical-projection
+# we use restart for demoing purposes, sometimes
+-arg -w -arg -undo-batch-mode
+
+# library stuff
+lib/maps.v
+lib/sets.v
+lib/debruijn.v
+lib/facts.v
+
+# System F
+semantics/lang.v
+semantics/notation.v
+# semantics/types.v
+semantics/types_sol.v
+# semantics/tactics.v
+# semantics/bigstep.v
+# semantics/church_encodings.v
+# semantics/parallel_subst.v
+# semantics/logrel.v
+# semantics/logrel_sol.v
+# semantics/free_theorems.v
+# semantics/binary_logrel.v
+# semantics/binary_logrel_sol.v
+# semantics/existential_invariants.v
+# semantics/church_encodings_faithful.v
