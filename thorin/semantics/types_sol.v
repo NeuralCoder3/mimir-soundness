@@ -27,6 +27,9 @@ Inductive type : Type :=
 #[export] Instance Subst_type : Subst type. derive. Defined.
 #[export] Instance SubstLemmas_typer : SubstLemmas type. derive. Qed.
 
+Print Subst.
+Print SubstLemmas.
+
 Definition typing_context := gmap string type.
 Implicit Types
   (Γ : typing_context)
