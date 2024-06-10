@@ -192,22 +192,28 @@ Qed.
 
 (* evaluation contexts for congruence reduction *)
 (* a hole/context is an evaluation point *)
-(* TODO: do we want to restrict context to only have hole right if value left? *)
+(*
+  one difference is that semantics uses val to restrict the contexts
+  to an evaluation from right to left
+  We use additional is_val to restrict the contexts
+
+  only relevant for two sided reductions in app, extract, and tuple
+*)
 Inductive ectx :=
   | HoleCtx
   (* only context in T as U might depend on x:T *)
-  | PiCtx (x:binder) (K: ectx) (U:expr)
+  | PiCtx (x:binder) (K: ectx) (U:expr) 
   | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr)
   | AppLCtx (K: ectx) (v2 : expr)
-  | AppRCtx (e1 : expr) (K: ectx)
+  | AppRCtx (e1 : expr) (K: ectx) (H: is_val e1)
   (* only first argument in sigma *)
   | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr))
-  | TupleCtx (es1:list expr) (K: ectx) (es2: list expr)
+  | TupleCtx (es1:list expr) (K: ectx) (es2: list expr) (H: Forall is_val es1)
   (* only en is up to be a context *)
   | ArrayCtx (x:binder) (K: ectx) (T:expr)
   | PackCtx (x:binder) (K: ectx) (e:expr)
   | ExtractLCtx (K: ectx) (ei:expr)
-  | ExtractRCtx (e:expr) (K: ectx)
+  | ExtractRCtx (e:expr) (K: ectx) (H: is_val e)
   .  
 
 (* Place an expression into the hole of a context *)
@@ -215,15 +221,15 @@ Fixpoint fill (K : ectx) (e : expr) : expr :=
   match K with
   | HoleCtx => e
   | PiCtx x K U => Pi x (fill K e) U
-  | LamCtx x K f U e => Lam x (fill K e) f U e
+  | LamCtx x K f U eb => Lam x (fill K e) f U eb
   | AppLCtx K v2 => App (fill K e) v2
-  | AppRCtx e1 K => App e1 (fill K e)
+  | AppRCtx e1 K _ => App e1 (fill K e)
   | SigmaCtx x K args => Sigma ((x, fill K e) :: args)
-  | TupleCtx es1 K es2 => Tuple (es1 ++ fill K e :: es2)
+  | TupleCtx es1 K es2 _ => Tuple (es1 ++ fill K e :: es2)
   | ArrayCtx x K T => Array x (fill K e) T
-  | PackCtx x K e => Pack x (fill K e) e
+  | PackCtx x K eb => Pack x (fill K e) eb
   | ExtractLCtx K ei => Extract (fill K e) ei
-  | ExtractRCtx e K => Extract e (fill K e)
+  | ExtractRCtx eb K _ => Extract eb (fill K e)
   end.
 
 (* Compose two evaluation contexts => place the second context into the hole of the first *)
@@ -233,13 +239,13 @@ Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   | PiCtx x K U => PiCtx x (comp_ectx K K2) U
   | LamCtx x K f U e => LamCtx x (comp_ectx K K2) f U e
   | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
-  | AppRCtx e1 K => AppRCtx e1 (comp_ectx K K2)
+  | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H
   | SigmaCtx x K args => SigmaCtx x (comp_ectx K K2) args
-  | TupleCtx es1 K es2 => TupleCtx es1 (comp_ectx K K2) es2
+  | TupleCtx es1 K es2 H => TupleCtx es1 (comp_ectx K K2) es2 H
   | ArrayCtx x K T => ArrayCtx x (comp_ectx K K2) T
   | PackCtx x K e => PackCtx x (comp_ectx K K2) e
   | ExtractLCtx K ei => ExtractLCtx (comp_ectx K K2) ei
-  | ExtractRCtx e K => ExtractRCtx e (comp_ectx K K2)
+  | ExtractRCtx e K H => ExtractRCtx e (comp_ectx K K2) H
   end.
 
 (** Contextual steps => lift reductions via contexts *)
@@ -258,25 +264,6 @@ Definition empty_ectx := HoleCtx.
 Lemma fill_empty e : fill empty_ectx e = e.
 Proof. done. Qed.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 Lemma fill_comp (K1 K2 : ectx) e : fill K1 (fill K2 e) = fill (comp_ectx K1 K2) e.
 Proof. induction K1; simpl; congruence. Qed.
 
@@ -293,14 +280,21 @@ Qed.
 
 Fixpoint is_closed (X : list string) (e : expr) : bool :=
   match e with
+  | Star | Box | Nat | Idx | LitNat _ | LitIdx _ _ => true
   | Var x => bool_decide (x ∈ X)
-  | Lam x e => is_closed (x :b: X) e
-  | Unpack x e1 e2 => is_closed X e1 && is_closed (x :b: X) e2
-  | Lit _ => true
-  | UnOp _ e | Fst e | Snd e | InjL e | InjR e | TApp e | TLam e | Pack e => is_closed X e
-  | App e1 e2 | BinOp _ e1 e2 | Pair e1 e2 => is_closed X e1 && is_closed X e2
-  |  If e0 e1 e2 | Case e0 e1 e2 =>
-   is_closed X e0 && is_closed X e1 && is_closed X e2
+  | Pi x T U => is_closed X T && is_closed (x :b: X) U
+  | Lam x T f U e => is_closed X T && is_closed (x :b: X) f && is_closed (x :b: X) U && is_closed (x :b: X) e
+  | App e1 e2 => is_closed X e1 && is_closed X e2
+  (* sigma closed under previous *)
+  | Sigma args => (fix is_closed_sigma (X : list string) (args : list (binder * expr)) : bool :=
+    match args with
+    | [] => true
+    | (x, T) :: args => is_closed X T && is_closed_sigma (x :b: X) args
+    end) X args
+  | Tuple es => forallb (is_closed X) es
+  | Array x en T => is_closed X en && is_closed (x :b: X) T
+  | Pack x en e => is_closed X en && is_closed (x :b: X) e
+  | Extract e ei => is_closed X e && is_closed X ei
   end.
 
 (** [closed] states closedness as a Coq proposition, through the [Is_true] transformer. *)
@@ -312,7 +306,11 @@ Proof. unfold closed. apply _. Defined.
 
 (** closed expressions *)
 Lemma is_closed_weaken X Y e : is_closed X e → X ⊆ Y → is_closed Y e.
-Proof. revert X Y; induction e; naive_solver (eauto; set_solver). Qed.
+Proof. 
+  (* revert X Y; induction e; try naive_solver (eauto; set_solver).  *)
+  (* TODO: the list cases (Sigma, Tuple) => need neested induction *)
+  all: admit.
+Admitted.
 
 Lemma is_closed_weaken_nil X e : is_closed [] e → is_closed X e.
 Proof. intros. by apply is_closed_weaken with [], list_subseteq_nil. Qed.
@@ -325,7 +323,9 @@ Proof.
     try match goal with
     | H : ¬(_ ∧ _) |- _ => apply not_and_l in H as [?%dec_stable|?%dec_stable]
     end; eauto using is_closed_weaken with set_solver.
-Qed.
+  (* TODO: check *)
+  all: admit.
+Admitted.
 Lemma is_closed_do_subst' X e x es :
   is_closed [] es → is_closed (x :b: X) e → is_closed X (subst' x es e).
 Proof. destruct x; eauto using is_closed_subst. Qed.
@@ -335,7 +335,9 @@ Lemma subst_is_closed X e x es : is_closed X e → x ∉ X → subst x es e = e.
 Proof.
   induction e in X |-*; simpl; rewrite ?bool_decide_spec, ?andb_True; intros ??;
     repeat case_decide; simplify_eq; simpl; f_equal; intuition eauto with set_solver.
-Qed.
+  (* TODO: check *)
+  all: admit.
+Admitted.
 
 Lemma subst_is_closed_nil e x es : is_closed [] e → subst x es e = e.
 Proof. intros. apply subst_is_closed with []; set_solver. Qed.
@@ -343,25 +345,50 @@ Lemma subst'_is_closed_nil e x es : is_closed [] e → subst' x es e = e.
 Proof. intros. destruct x as [ | x]. { done. } by apply subst_is_closed_nil. Qed.
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 (* we derive a few lemmas about contextual steps *)
 Lemma contextual_step_app_l e1 e1' e2:
-  is_val e2 →
   contextual_step e1 e1' →
   contextual_step (App e1 e2) (App e1' e2).
 Proof.
-  intros [v <-%of_to_val]%is_val_spec Hcontextual.
-  by eapply (fill_contextual_step (AppLCtx HoleCtx v)).
+  intros Hcontextual.
+  by apply (fill_contextual_step (AppLCtx HoleCtx e2)).
 Qed.
 
 Lemma contextual_step_app_r e1 e2 e2':
+  is_val e1 →
   contextual_step e2 e2' →
   contextual_step (App e1 e2) (App e1 e2').
 Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (AppRCtx e1 HoleCtx)).
+  intros H Hcontextual.
+  by apply (fill_contextual_step (AppRCtx e1 HoleCtx H)).
 Qed.
 
-Lemma contextual_step_tapp e e':
+
+
+
+
+
+
+
+
+(* TODO: complete other lemmata about contextual steps *)
+
+
+
+(* Lemma contextual_step_tapp e e':
   contextual_step e e' →
   contextual_step (TApp e) (TApp e').
 Proof.
@@ -481,4 +508,4 @@ Hint Resolve
 contextual_step_app_l contextual_step_app_r contextual_step_binop_l contextual_step_binop_r
 contextual_step_case contextual_step_fst contextual_step_if contextual_step_injl contextual_step_injr
 contextual_step_pack contextual_step_pair_l contextual_step_pair_r contextual_step_snd contextual_step_tapp
-contextual_step_tapp contextual_step_unop contextual_step_unpack : core.
+contextual_step_tapp contextual_step_unop contextual_step_unpack : core. *)
