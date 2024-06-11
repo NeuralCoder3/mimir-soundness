@@ -157,7 +157,11 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       type_assignable (<[x := T]> Γ) U e →
       TY Γ ⊢ (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
-    (* TODO: lambda anon *)
+    | typed_lam_anon Γ T ef U e:
+      TY Γ ⊢ ef : Bool →
+      (* ignore x *)
+      type_assignable Γ T e →
+      TY Γ ⊢ (Lam BAnon T ef U e) : (Pi BAnon T U)
     | typed_app Γ e eT x T U:
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
@@ -178,7 +182,11 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY (<[x := T]> Γ) ⊢ Sigma xs : s' →
       kind_dominance [s; s'] s'' →
       TY Γ ⊢ (Sigma ((BNamed x, T)::xs)) : s''
-    (* TODO: sigma anon *)
+    | typed_sigma_cons_anon Γ T s xs s' s'':
+      TY Γ ⊢ T : s →
+      TY Γ ⊢ Sigma xs : s' →
+      kind_dominance [s; s'] s'' →
+      TY Γ ⊢ (Sigma ((BAnon, T)::xs)) : s''
     | types_tuple Γ es Ts:
       Forall2 (syn_typed Γ) es Ts →
       (* TODO: normalize to T, 
@@ -189,13 +197,19 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ en : Nat →
       TY (<[x := App Idx en]> Γ) ⊢ T : s →
       TY Γ ⊢ (Array (BNamed x) en T) : s
-    (* TODO: arr anon *)
+    | typed_arr_anon Γ en T s:
+      TY Γ ⊢ en : Nat →
+      TY Γ ⊢ T : s →
+      TY Γ ⊢ (Array BAnon en T) : s
     | typed_pack Γ x en e T:
       TY Γ ⊢ en : Nat →
       TY (<[x := App Idx en]> Γ) ⊢ e : T →
       (* TODO: normalize array to U *)
       TY Γ ⊢ (Pack (BNamed x) en e) : (Array (BNamed x) en T)
-    (* TODO: pack anon *)
+    | typed_pack_anon Γ en e T:
+      TY Γ ⊢ en : Nat →
+      TY Γ ⊢ e : T →
+      TY Γ ⊢ (Pack BAnon en e) : (Array BAnon en T)
     | typed_extract_array Γ e ei en T x:
       (* transitively, we know en:Nat *)
       TY Γ ⊢ e : (Array x en T) →
@@ -220,6 +234,12 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
   (* TODO: tuple assignable *)
+  | assignable_sigma Γ Ts e:
+      (* 
+        TODO:
+        e#in is assignable to T_i under subst for all previous e
+      *)
+      type_assignable Γ (Sigma Ts) e
 where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
 .
@@ -231,87 +251,10 @@ where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 
 
 
-  | typed_var n Γ x A :
-      Γ !! x = Some A →
-      TY n; Γ ⊢ (Var x) : A
-  | typed_lam n Γ x e A B :
-      TY n ; (<[ x := A]> Γ) ⊢ e : B →
-      type_wf n A →
-      TY n; Γ ⊢ (Lam (BNamed x) e) : (A → B)
-  | typed_lam_anon n Γ e A B :
-      TY n ; Γ ⊢ e : B →
-      type_wf n A →
-      TY n; Γ ⊢ (Lam BAnon e) : (A → B)
-  | typed_tlam n Γ e A :
-      (* we need to shift the context up as we descend under a binder *)
-      TY S n; (⤉ Γ) ⊢ e : A →
-      TY n; Γ ⊢ (Λ, e) : (∀: A)
-  | typed_tapp n Γ A B e :
-      TY n; Γ ⊢ e : (∀: A) →
-      type_wf n B →
-      (* A.[B/] is the notation for Autosubst's substitution operation that
-        replaces variable 0 by [B] *)
-      TY n; Γ ⊢ (e <>) : (A.[B/])
-  | typed_pack n Γ A B e :
-      type_wf n B →
-      type_wf (S n) A →
-      TY n; Γ ⊢ e : (A.[B/]) →
-      TY n; Γ ⊢ (pack e) : (∃: A)
-  | typed_unpack n Γ A B e e' x :
-      type_wf n B → (* we should not leak the existential! *)
-      TY n; Γ ⊢ e : (∃: A) →
-      (* As we descend under a type variable binder for the typing of [e'],
-          we need to shift the indices in [Γ] and [B] up by one.
-        On the other hand, [A] is already defined under this binder, so we need not shift it.
-      *)
-      TY (S n); (<[x := A]>(⤉Γ)) ⊢ e' : (B.[ren (+1)]) →
-      TY n; Γ ⊢ (unpack e as BNamed x in e') : B
-  | typed_int n Γ z : TY n; Γ ⊢ (Lit $ LitInt z) : Int
-  | typed_bool n Γ b : TY n; Γ ⊢ (Lit $ LitBool b) : Bool
-  | typed_unit n Γ : TY n; Γ ⊢ (Lit $ LitUnit) : Unit
-  | typed_if n Γ e0 e1 e2 A :
-      TY n; Γ ⊢ e0 : Bool →
-      TY n; Γ ⊢ e1 : A →
-      TY n; Γ ⊢ e2 : A →
-      TY n; Γ ⊢ If e0 e1 e2 : A
-  | typed_app n Γ e1 e2 A B :
-      TY n; Γ ⊢ e1 : (A → B) →
-      TY n; Γ ⊢ e2 : A →
-      TY n; Γ ⊢ (e1 e2)%E : B
-  | typed_binop n Γ e1 e2 op A B C :
-      bin_op_typed op A B C →
-      TY n; Γ ⊢ e1 : A →
-      TY n; Γ ⊢ e2 : B →
-      TY n; Γ ⊢ BinOp op e1 e2 : C
-  | typed_unop n Γ e op A B :
-      un_op_typed op A B →
-      TY n; Γ ⊢ e : A →
-      TY n; Γ ⊢ UnOp op e : B
-  | typed_pair n Γ e1 e2 A B :
-      TY n; Γ ⊢ e1 : A →
-      TY n; Γ ⊢ e2 : B →
-      TY n; Γ ⊢ (e1, e2) : A × B
-  | typed_fst n Γ e A B :
-      TY n; Γ ⊢ e : A × B →
-      TY n; Γ ⊢ Fst e : A
-  | typed_snd n Γ e A B :
-      TY n; Γ ⊢ e : A × B →
-      TY n; Γ ⊢ Snd e : B
-  | typed_injl n Γ e A B :
-      type_wf n B →
-      TY n; Γ ⊢ e : A →
-      TY n; Γ ⊢ InjL e : A + B
-  | typed_injr n Γ e A B :
-      type_wf n A →
-      TY n; Γ ⊢ e : B →
-      TY n; Γ ⊢ InjR e : A + B
-  | typed_case n Γ e e1 e2 A B C :
-      TY n; Γ ⊢ e : B + C →
-      TY n; Γ ⊢ e1 : (B → A) →
-      TY n; Γ ⊢ e2 : (C → A) →
-      TY n; Γ ⊢ Case e e1 e2 : A
-where "'TY' n ; Γ ⊢ e : A" := (syn_typed n Γ e%E A%ty).
-#[export] Hint Constructors syn_typed : core.
+
+
+
+
 
 (** Examples *)
 Goal TY 0; ∅ ⊢ (λ: "x", #1 + "x")%E : (Int → Int).
