@@ -153,6 +153,15 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       kind_dominance [sT; sU] s →
       TY Γ ⊢ (Pi BAnon T U) : s
     | typed_lam Γ x T ef U e:
+      (* TODO: typing of T and U (not in paper) (star as well as box allowed) 
+      
+        e.g. 
+        U = Nat : *
+        λ (x:Nat) : Nat, 5
+
+        U = * : Box
+        λ (x:Nat) : *, Nat
+      *)
       TY (<[x := T]> Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       type_assignable (<[x := T]> Γ) U e →
@@ -218,6 +227,7 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ (Extract e ei) : (subst' x ei T)
     | typed_extract_tuple Γ e ei Ts Ts' T n s U:
       TY Γ ⊢ e : (Sigma Ts) →
+      n = length Ts →
       TY Γ ⊢ ei : (App Idx n) →
       (* TODO: recursive closure *)
       Ts' = Ts ->
@@ -246,59 +256,101 @@ where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 #[export] Hint Constructors syn_typed : core.
 
 
-
-
-
-
-
-
-
-
-
-
-(** Examples *)
-Goal TY 0; ∅ ⊢ (λ: "x", #1 + "x")%E : (Int → Int).
-Proof. eauto. Qed.
-(** [∀: #0 → #0] corresponds to [∀ α. α → α] with named binders. *)
-Goal TY 0; ∅ ⊢ (Λ, λ: "x", "x")%E : (∀: #0 → #0).
-Proof. repeat econstructor. Qed.
-Goal TY 0; ∅ ⊢ (pack ((λ: "x", "x"), #42)) : ∃: (#0 → #0) × #0.
+(* Lemma untyped_empty_extract:
+  ~ (exists Γ ei T, TY Γ ⊢ (Extract (Tuple []) ei) : T).
 Proof.
-  apply (typed_pack _ _ _ Int).
-  - eauto.
-  - repeat econstructor.
-  - (* [asimpl] is Autosubst's tactic for simplifying goals involving type substitutions. *)
-    asimpl. eauto.
-Qed.
-Goal TY 0; ∅ ⊢ (unpack (pack ((λ: "x", "x"), #42)) as "y" in (λ: "x", #1337) ((Fst "y") (Snd "y"))) : Int.
+  intros (Γ&ei&T&H).
+  inversion H; subst.
+  - admit.
+  - inversion H4;subst. *)
+
+
+
+
+
+
+
+Lemma syn_typed_closed Γ e A X :
+  TY Γ ⊢ e : A →
+  (∀ x, x ∈ dom Γ → x ∈ X) →
+  is_closed X e.
 Proof.
-  (* if we want to typecheck stuff with existentials, we need a bit more explicit proofs.
-    Letting eauto try to instantiate the evars becomes too expensive. *)
-  apply (typed_unpack _ _ ((#0 → #0) × #0)%ty).
-  - done.
-  - apply (typed_pack _ _ _ Int); asimpl; eauto.
-    repeat econstructor.
-  - eapply (typed_app _ _ _ _ (#0)%ty); eauto 10.
-Qed.
+  (* remember e as e'. *)
+  induction 1 in X |-*;simpl; intros Hx; try done.
+  { (* var *) apply bool_decide_pack, Hx. apply elem_of_dom; eauto. }
 
-(** fails: we are not allowed to leak the existential *)
-Goal TY 0; ∅ ⊢ (unpack (pack ((λ: "x", "x"), #42)) as "y" in (Fst "y") (Snd "y")) : #0.
-Proof.
-  apply (typed_unpack _ _ ((#0 → #0) × #0)%ty).
-Abort.
+  { (* Pi *)
+    apply andb_True; split; try naive_solver.
+    apply IHsyn_typed2. intros y. rewrite elem_of_dom lookup_insert_is_Some.
+    intros [->|[? Hin]]. 
+    - left.
+    - right. apply Hx. apply elem_of_dom. assumption.
+  }
+  all: try (apply andb_True; split; try naive_solver).
+  { (* Lam front stuff *)
+    apply andb_True; split.
+    1: apply andb_True; split.
+    (* TODO: should T in lambda be typed? *)
+    admit.
+    - apply IHsyn_typed;intros x0.
+    rewrite elem_of_dom lookup_insert_is_Some; intros [->|[? Hin]].
+      + left.
+      + right. now apply Hx, elem_of_dom. 
+    - (* TODO: need typing of U *)
+    admit.
+  }
+  { (* Lam body *)
+    (* TODO: need mutual induction for type assignable to solve e *)
+    admit.
+  }
+  admit. (* lam anon *)
+  admit. (* lam anon body *)
+  {
+    (* app argument *)
+    (* TODO: needs assignable induction *)
+    admit.
+  }
+  {
+    (* sigma *)  
+    (* TODO: needs nested induction for sigma *)
+    admit.
+  }
+  {
+    (* TODO: needs nested induction for sigma *)
+    admit.
+  }
+  {
+    (* array *)
+    apply IHsyn_typed2;intros x0. 
+    rewrite elem_of_dom. 
+    rewrite lookup_insert_is_Some.
+    intros [->|[? Hin]].
+    - left.
+    - right.
+    apply Hx. apply elem_of_dom. assumption.
+  }
+  {
+    (* pack (the same again) *)
+    apply IHsyn_typed2;intros x0. 
+    rewrite elem_of_dom. 
+    rewrite lookup_insert_is_Some.
+    intros [->|[? Hin]].
+    - left.
+    - right.
+    apply Hx. apply elem_of_dom. assumption.
+  }
+Admitted.
 
-(* derived typing rule for match *)
-Lemma typed_match n Γ e e1 e2 x1 x2 A B C :
-  type_wf n B →
-  type_wf n C →
-  TY n; Γ ⊢ e : B + C →
-  TY n; <[x1 := B]> Γ ⊢ e1 : A →
-  TY n; <[x2 := C]> Γ ⊢ e2 : A →
-  TY n; Γ ⊢ match: e with InjL (BNamed x1) => e1 | InjR (BNamed x2) => e2 end : A.
-Proof. eauto. Qed.
 
-Lemma syn_typed_closed n Γ e A X :
-  TY n ; Γ ⊢ e : A →
+
+
+
+
+
+
+
+Lemma syn_typed_closed Γ e A X :
+  TY Γ ⊢ e : A →
   (∀ x, x ∈ dom Γ → x ∈ X) →
   is_closed X e.
 Proof.
