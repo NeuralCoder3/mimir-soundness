@@ -2,11 +2,11 @@ From stdpp Require Import base relations.
 From iris Require Import prelude.
 From thorin.lib Require Import maps.
 From thorin Require Import lang notation.
-From Autosubst Require Export Autosubst.
+(* From Autosubst Require Export Autosubst. *)
 
 (** ** Syntactic typing *)
 (** We use De Bruijn indices with the help of the Autosubst library. *)
-Inductive type : Type :=
+(* Inductive type : Type :=
   (** [var] is the type of variables of Autosubst -- it unfolds to [nat] *)
   | TVar : var → type
   | Int
@@ -17,26 +17,25 @@ Inductive type : Type :=
   | TExists : {bind 1 of type} → type
   | Fun (A B : type)
   | Prod (A B : type)
-  | Sum (A B : type).
+  | Sum (A B : type). *)
 
 (** Autosubst instances.
   This lets Autosubst do its magic and derive all the substitution functions, etc.
  *)
-#[export] Instance Ids_type : Ids type. derive. Defined.
+(* #[export] Instance Ids_type : Ids type. derive. Defined.
 #[export] Instance Rename_type : Rename type. derive. Defined.
 #[export] Instance Subst_type : Subst type. derive. Defined.
 #[export] Instance SubstLemmas_typer : SubstLemmas type. derive. Qed.
 
 Print Subst.
-Print SubstLemmas.
+Print SubstLemmas. *)
 
-Definition typing_context := gmap string type.
+Definition typing_context := gmap string expr.
 Implicit Types
   (Γ : typing_context)
-  (v : val)
   (e : expr).
 
-Declare Scope FType_scope.
+(* Declare Scope FType_scope.
 Delimit Scope FType_scope with ty.
 Bind Scope FType_scope with type.
 Notation "# x" := (TVar x) : FType_scope.
@@ -51,7 +50,7 @@ Notation "∃: τ" :=
 Infix "×" := Prod (at level 70) : FType_scope.
 Notation "(×)" := Prod (only parsing) : FType_scope.
 Infix "+" := Sum : FType_scope.
-Notation "(+)" := Sum (only parsing) : FType_scope.
+Notation "(+)" := Sum (only parsing) : FType_scope. *)
 
 
 (** Shift all the indices in the context by one,
@@ -59,13 +58,12 @@ Notation "(+)" := Sum (only parsing) : FType_scope.
 (* [<$>] is notation for the [fmap] operation that maps the substitution over the whole map. *)
 (* [ren] is Autosubst's renaming operation -- it renames all type variables according to the given function,
   in this case [(+1)] to shift the variables up by 1. *)
-Notation "⤉ Γ" := (Autosubst_Classes.subst (ren (+1)) <$> Γ) (at level 10, format "⤉ Γ").
+(* Notation "⤉ Γ" := (Autosubst_Classes.subst (ren (+1)) <$> Γ) (at level 10, format "⤉ Γ"). *)
 
-Reserved Notation "'TY' n ; Γ ⊢ e : A" (at level 74, e, A at next level).
 
 (** [type_wf n A] states that a type [A] has only free variables up to < [n].
  (in other words, all variables occurring free are strictly bounded by [n]). *)
-Inductive type_wf : nat → type → Prop :=
+(* Inductive type_wf : nat → type → Prop :=
   | type_wf_TVar m n:
       m < n →
       type_wf n (TVar m)
@@ -89,11 +87,13 @@ Inductive type_wf : nat → type → Prop :=
   | type_wf_Sum n A B :
       type_wf n A →
       type_wf n B →
-      type_wf n (Sum A B)
-.
-#[export] Hint Constructors type_wf : core.
+      type_wf n (Sum A B) 
+. 
+*)
 
-Inductive bin_op_typed : bin_op → type → type → type → Prop :=
+(* #[export] Hint Constructors type_wf : core. *)
+
+(* Inductive bin_op_typed : bin_op → type → type → type → Prop :=
   | plus_op_typed : bin_op_typed PlusOp Int Int Int
   | minus_op_typed : bin_op_typed MinusOp Int Int Int
   | mul_op_typed : bin_op_typed MultOp Int Int Int
@@ -104,9 +104,133 @@ Inductive bin_op_typed : bin_op → type → type → type → Prop :=
 
 Inductive un_op_typed : un_op → type → type → Prop :=
   | neg_op_typed : un_op_typed NegOp Bool Bool
-  | minus_un_op_typed : un_op_typed MinusUnOp Int Int.
+  | minus_un_op_typed : un_op_typed MinusUnOp Int Int. *)
 
-Inductive syn_typed : nat → typing_context → expr → type → Prop :=
+(* Reserved Notation "[ s1 s2 .. sn ] ⇝ s" (at level 74, s at level 0). *)
+
+Inductive kind_dominance: list expr -> expr -> Prop :=
+  | empty_dom: kind_dominance [] Star
+  | star_idem xs s':
+      kind_dominance xs s' →
+      kind_dominance (Star::xs) s'
+  | box_dom xs s':
+      kind_dominance xs s' →
+      kind_dominance (Box::xs) Box
+(* where "[ s1 s2 .. sn ] ⇝ s" := (kind_dominance [s1; s2; ..; sn] s). *)
+.
+
+Definition Bool := App Idx 2.
+
+Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
+Reserved Notation "'TY' Γ ⊢ A ← e" (at level 74, e, A at next level).
+Inductive syn_typed : typing_context → expr → expr → Prop :=
+   | typed_star Γ:
+      TY Γ ⊢ Star : Box
+   | typed_bot Γ:
+      TY Γ ⊢ Bot : Star
+   | typed_nat Γ:
+      TY Γ ⊢ Nat : Star
+   | typed_idx Γ:
+      TY Γ ⊢ Idx : (Pi BAnon Nat Star)
+   | typed_lit_nat Γ n:
+      TY Γ ⊢ (#n)%E : Nat
+    | typed_lit_idx Γ n i:
+      (* i < n by construction i:fin n *)
+      TY Γ ⊢ (LitIdx n i) : (App Idx n)
+    | typed_var Γ x A:
+      Γ !! x = Some A →
+      TY Γ ⊢ (Var x) : A
+    (* no axiom typing *)
+    | typed_pi Γ T sT x U sU s:
+      TY Γ ⊢ T : sT →
+      TY (<[x := T]> Γ) ⊢ U : sU →
+      kind_dominance [sT; sU] s →
+      TY Γ ⊢ (Pi (BNamed x) T U) : s
+    | typed_pi_anon Γ T sT U sU s:
+      (* same as above but ignore unnamed binder *)
+      TY Γ ⊢ T : sT →
+      TY Γ ⊢ U : sU →
+      kind_dominance [sT; sU] s →
+      TY Γ ⊢ (Pi BAnon T U) : s
+    | typed_lam Γ x T ef U e:
+      TY (<[x := T]> Γ) ⊢ ef : Bool →
+      (* TY (<[x := T]> Γ) ⊢ U ← e → *)
+      type_assignable (<[x := T]> Γ) U e →
+      TY Γ ⊢ (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
+    (* TODO: lambda anon *)
+    | typed_app Γ e eT x T U:
+      (* handles both named and unnamed *)
+      TY Γ ⊢ e : (Pi x T U) →
+      type_assignable Γ T eT →
+      TY Γ ⊢ (App e eT) : (subst' x eT U)
+    (*
+      all typed under the previous
+      and dominating kind overall
+      we unroll directly instead of a mutual predicate
+      we use the associativity of dominance for the formulation 
+      of pairwise domainance
+    *)
+    (* TODO: mistake in pdf (n-2 in assumption) *)
+    | typed_sigma_empty Γ:
+      TY Γ ⊢ Sigma [] : Star
+    | typed_sigma_cons Γ x T s xs s' s'':
+      TY Γ ⊢ T : s →
+      TY (<[x := T]> Γ) ⊢ Sigma xs : s' →
+      kind_dominance [s; s'] s'' →
+      TY Γ ⊢ (Sigma ((BNamed x, T)::xs)) : s''
+    (* TODO: sigma anon *)
+    | types_tuple Γ es Ts:
+      Forall2 (syn_typed Γ) es Ts →
+      (* TODO: normalize to T, 
+      TODO: how to handle [bool, fun x -> if x then 1 else 0] : [T:*, T -> Nat] *)
+      TY Γ ⊢ (Tuple es) : (Sigma (map (fun T => (BAnon, T)) Ts))
+    | typed_arr Γ x en T s:
+      (* TODO: mistake in pdf (s vs s') *)
+      TY Γ ⊢ en : Nat →
+      TY (<[x := App Idx en]> Γ) ⊢ T : s →
+      TY Γ ⊢ (Array (BNamed x) en T) : s
+    (* TODO: arr anon *)
+    | typed_pack Γ x en e T:
+      TY Γ ⊢ en : Nat →
+      TY (<[x := App Idx en]> Γ) ⊢ e : T →
+      (* TODO: normalize array to U *)
+      TY Γ ⊢ (Pack (BNamed x) en e) : (Array (BNamed x) en T)
+    (* TODO: pack anon *)
+    | typed_extract_array Γ e ei en T x:
+      (* transitively, we know en:Nat *)
+      TY Γ ⊢ e : (Array x en T) →
+      TY Γ ⊢ ei : (App Idx en) →
+      (* we again handle named and unnamed simultanously *)
+      TY Γ ⊢ (Extract e ei) : (subst' x ei T)
+    | typed_extract_tuple Γ e ei Ts Ts' T n s U:
+      TY Γ ⊢ e : (Sigma Ts) →
+      TY Γ ⊢ ei : (App Idx n) →
+      (* TODO: recursive closure *)
+      Ts' = Ts ->
+      (* TODO: normalize tuple to T (needed for convergence (eventually reach array)) *)
+      T = Sigma Ts' ->
+      TY Γ ⊢ T : s ->
+      (* TODO: normalize type to U *)
+      U = Extract T ei ->
+      TY Γ ⊢ (Extract e ei) : U
+
+with type_assignable : typing_context -> expr -> expr -> Prop :=
+  | assignable_typed Γ e T:
+      TY Γ ⊢ e : T ->
+      (* TY Γ ⊢ T ← e  *)
+      type_assignable Γ T e
+  (* TODO: tuple assignable *)
+where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
+(* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
+.
+#[export] Hint Constructors syn_typed : core.
+
+
+
+
+
+
+
   | typed_var n Γ x A :
       Γ !! x = Some A →
       TY n; Γ ⊢ (Var x) : A

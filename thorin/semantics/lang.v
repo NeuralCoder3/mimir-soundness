@@ -10,6 +10,7 @@ Delimit Scope val_scope with V.
 Inductive expr :=
   | Star
   | Box
+  | Bot
   | Nat
   | Idx 
   | LitNat (n : nat)
@@ -57,6 +58,7 @@ Bind Scope expr_scope with expr.
 Inductive is_val : expr → Prop :=
   | StarV : is_val Star
   | BoxV : is_val Box
+  | BotV : is_val Bot
   | NatV : is_val Nat
   | IdxV : is_val Idx
   (* TODO: is (Idx n) a value? if not what does it reduce to *)
@@ -95,7 +97,7 @@ Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
   (* let recursive_under y expr := subst_if_not subst y x es expr in *)
   let recurse_under y expr := if decide (y = BNamed x) then expr else subst x es expr in
   match e with
-  | Star | Box | Nat | Idx | LitNat _ | LitIdx _ _ | Var _ => e
+  | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _ | Var _ => e
   (* replace x in T, replace in U if not x *)
   | Pi y T U => 
     (* Pi y (subst x es T) (subst_if_not subst y x es U) *)
@@ -141,6 +143,10 @@ Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
 Definition subst' (mx : binder) (es : expr) : expr → expr :=
   match mx with BNamed x => subst x es | BAnon => id end.
 
+(* Notation "e . [ x / e2 ]" := (subst x e2 e) (at level 20). *)
+(* Notation "e '.' '[' e2 '/' x ']'" := (subst' x e2 e) (at level 20).
+Check (Lam (BNamed "x") Nat (Var "x") Nat (Var "x")).[LitNat 3 / "x"]. *)
+
 (* https://coq.inria.fr/doc/v8.18/refman/language/core/conversion.html *)
 Inductive base_step : expr -> expr -> Prop :=
 (* 'real' steps (congruence steps later) *)
@@ -168,6 +174,7 @@ Inductive base_step : expr -> expr -> Prop :=
     e' = subst' x ei e ->
     base_step (Extract (Pack x (LitNat n) e) ei) e'
   .
+
 
 
 Lemma fin_inc n (i:Fin.t n): (` (Fin.to_nat (Fin.FS i))) = S (` (Fin.to_nat i)).
@@ -280,7 +287,7 @@ Qed.
 
 Fixpoint is_closed (X : list string) (e : expr) : bool :=
   match e with
-  | Star | Box | Nat | Idx | LitNat _ | LitIdx _ _ => true
+  | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _ => true
   | Var x => bool_decide (x ∈ X)
   | Pi x T U => is_closed X T && is_closed (x :b: X) U
   | Lam x T f U e => is_closed X T && is_closed (x :b: X) f && is_closed (x :b: X) U && is_closed (x :b: X) e
