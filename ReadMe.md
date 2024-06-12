@@ -26,6 +26,7 @@ Libraries:
   - [Programming Language Foundations](https://softwarefoundations.cis.upenn.edu/plf-current/index.html)
     - [STLC (Simply Typed Lambda Calculus)](https://softwarefoundations.cis.upenn.edu/plf-current/Stlc.html)
       - [Progress and Preservation](https://softwarefoundations.cis.upenn.edu/plf-current/StlcProp.html)
+- [Lemmas about CC (Calculus of Constructions)](https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf)
 
 ## Semantics
 

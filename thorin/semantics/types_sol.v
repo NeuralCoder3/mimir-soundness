@@ -2,6 +2,7 @@ From stdpp Require Import base relations.
 From iris Require Import prelude.
 From thorin.lib Require Import maps.
 From thorin Require Import lang notation.
+Require Import Coq.Program.Equality.
 (* From Autosubst Require Export Autosubst. *)
 
 (** ** Syntactic typing *)
@@ -121,6 +122,9 @@ Inductive kind_dominance: list expr -> expr -> Prop :=
 
 Definition Bool := App Idx 2.
 
+
+(* TODO: check with page 46 in https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf *)
+
 Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
 Reserved Notation "'TY' Γ ⊢ A ← e" (at level 74, e, A at next level).
 Inductive syn_typed : typing_context → expr → expr → Prop :=
@@ -137,8 +141,10 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
     | typed_lit_idx Γ n i:
       (* i < n by construction i:fin n *)
       TY Γ ⊢ (LitIdx n i) : (App Idx n)
-    | typed_var Γ x A:
+    | typed_var Γ x A sA:
       Γ !! x = Some A →
+      (* TODO: missing in paper: A has to be typed (with a kind) *)
+      TY Γ ⊢ A : sA →
       TY Γ ⊢ (Var x) : A
     (* no axiom typing *)
     | typed_pi Γ T sT x U sU s:
@@ -152,8 +158,13 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ U : sU →
       kind_dominance [sT; sU] s →
       TY Γ ⊢ (Pi BAnon T U) : s
-    | typed_lam Γ x T ef U e:
+    | typed_lam Γ x T ef U e sT sU:
       (* TODO: typing of T and U (not in paper) (star as well as box allowed) 
+
+      (well we might want to allow app, ... => any valid type
+      this allows λ (x:5) : Nat, 42
+      which can never be applied
+      but it should not destroy anything)
       
         e.g. 
         U = Nat : *
@@ -162,11 +173,15 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
         U = * : Box
         λ (x:Nat) : *, Nat
       *)
+      TY Γ ⊢ T : sT →
+      TY (<[x := T]> Γ) ⊢ U : sU →
       TY (<[x := T]> Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       type_assignable (<[x := T]> Γ) U e →
       TY Γ ⊢ (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
-    | typed_lam_anon Γ T ef U e:
+    | typed_lam_anon Γ T ef U e sT sU:
+      TY Γ ⊢ T : sT →
+      TY Γ ⊢ U : sU →
       TY Γ ⊢ ef : Bool →
       (* ignore x *)
       type_assignable Γ T e →
@@ -270,6 +285,12 @@ Proof.
 
 
 
+
+
+
+
+
+
 Lemma syn_typed_closed Γ e A X :
   TY Γ ⊢ e : A →
   (∀ x, x ∈ dom Γ → x ∈ X) →
@@ -290,21 +311,23 @@ Proof.
   { (* Lam front stuff *)
     apply andb_True; split.
     1: apply andb_True; split.
-    (* TODO: should T in lambda be typed? *)
-    admit.
-    - apply IHsyn_typed;intros x0.
+    - naive_solver. 
+    - apply IHsyn_typed3;intros x0.
     rewrite elem_of_dom lookup_insert_is_Some; intros [->|[? Hin]].
       + left.
       + right. now apply Hx, elem_of_dom. 
-    - (* TODO: need typing of U *)
-    admit.
+    - apply IHsyn_typed2;intros x0.
+      rewrite elem_of_dom lookup_insert_is_Some; intros [->|[? Hin]].
+      + left.
+      + right. now apply Hx, elem_of_dom.
   }
   { (* Lam body *)
     (* TODO: need mutual induction for type assignable to solve e *)
     admit.
   }
-  admit. (* lam anon *)
-  admit. (* lam anon body *)
+  { (* lam anon body *)
+  admit.
+  }
   {
     (* app argument *)
     (* TODO: needs assignable induction *)
@@ -342,45 +365,218 @@ Proof.
 Admitted.
 
 
-
-
-
-
-
-
-
-Lemma syn_typed_closed Γ e A X :
+Lemma typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
-  (∀ x, x ∈ dom Γ → x ∈ X) →
-  is_closed X e.
+  Γ ⊆ Δ →
+  TY Δ ⊢ e : A.
 Proof.
-  induction 1 as [ | ??????? IH | | n Γ e A H IH | | | n Γ A B e e' x Hwf H1 IH1 H2 IH2 | | | | | | | | | | | | | ] in X |-*; simpl; intros Hx; try done.
+  induction 1 in Δ |-*; intros Hsub; eauto.
+  - (* var *) econstructor. 1: by eapply lookup_weaken. apply IHsyn_typed. done.
+  - (* pi *) econstructor; eauto.
+    eapply IHsyn_typed2. apply insert_mono. done.
+  - (* lam *) econstructor; eauto using insert_mono.
+    admit. (* needs mutual induction with type_assignable *)
+  - (* lam anon *)
+    econstructor; eauto.
+    admit. (* needs mutual induction with type_assignable *)
+  - (* app *)
+    econstructor.
+    + apply IHsyn_typed. done.
+    + admit. (* needs assignable induction *)
+  - (* sigma *)
+    econstructor; eauto.
+    apply IHsyn_typed2.
+    now apply insert_mono.
+  - (* Tuple *)
+    econstructor.
+    admit. (* needs nested induction for sigma *)
+  - (* Array *)
+    econstructor; eauto.
+    apply IHsyn_typed2.
+    now apply insert_mono.
+  - (* Pack *)
+    econstructor; eauto.
+    apply IHsyn_typed2.
+    now apply insert_mono.
+Admitted.
 
-  { (* var *) apply bool_decide_pack, Hx. apply elem_of_dom; eauto. }
-  { (* lam *) apply IH.
-    intros y. rewrite elem_of_dom lookup_insert_is_Some.
-    intros [<- | [? Hy]]; first by apply elem_of_cons; eauto.
-    apply elem_of_cons. right. eapply Hx. by apply elem_of_dom.
-  }
-  { (* anon lam *) naive_solver. }
-  { (* tlam *)
-    eapply IH. intros x Hel. apply Hx.
-    by rewrite dom_fmap in Hel.
-  }
-  3: { (* unpack *)
-    apply andb_True; split.
-    - apply IH1. apply Hx.
-    - apply IH2. intros y. rewrite elem_of_dom lookup_insert_is_Some.
-    intros [<- | [? Hy]]; first by apply elem_of_cons; eauto.
-    apply elem_of_cons. right. eapply Hx.
-    apply elem_of_dom. revert Hy. rewrite lookup_fmap fmap_is_Some. done.
-  }
-  (* everything else *)
-  all: repeat match goal with
-              | |- Is_true (_ && _)  => apply andb_True; split
-              end.
-  all: try naive_solver.
-Qed.
+
+
+(** Typing inversion lemmas 
+what do we know from expression is typed
+(expression specific everything else generic)
+*)
+Lemma var_inversion Γ (x: string) A: TY Γ ⊢ x : A → 
+  exists sA, Γ !! x = Some A ∧ TY Γ ⊢ A : sA.
+Proof. inversion 1; subst; eauto. Qed.
+
+Lemma pi_inversion Γ T x U s:
+  TY Γ ⊢ (Pi (BNamed x) T U) : s →
+  ∃ sT sU, TY Γ ⊢ T : sT ∧ TY (<[x := T]> Γ) ⊢ U : sU ∧ kind_dominance [sT; sU] s.
+Proof. inversion 1; subst; eauto. Qed.
+
+Lemma pi_anon_inversion Γ T U s:
+  TY Γ ⊢ (Pi BAnon T U) : s →
+  ∃ sT sU, TY Γ ⊢ T : sT ∧ TY Γ ⊢ U : sU ∧ kind_dominance [sT; sU] s.
+Proof. inversion 1; subst; eauto. Qed.
+
+(* larger eauto to instantiate sT and sU correctly *)
+Lemma lam_inversion Γ x T ef U e C:
+  TY Γ ⊢ (Lam (BNamed x) T ef U e) : C →
+  exists sT sU,
+  C = (Pi (BNamed x) T U) ∧
+  TY Γ ⊢ T : sT ∧
+  TY (<[x := T]> Γ) ⊢ U : sU ∧
+  TY (<[x := T]> Γ) ⊢ ef : Bool ∧
+  type_assignable (<[x := T]> Γ) U e.
+Proof. inversion 1; subst; eauto 10. Qed.
+
+Lemma lam_anon_inversion Γ T ef U e C:
+  TY Γ ⊢ (Lam BAnon T ef U e) : C →
+  exists sT sU,
+  C = (Pi BAnon T U) ∧
+  TY Γ ⊢ T : sT ∧
+  TY Γ ⊢ U : sU ∧
+  TY Γ ⊢ ef : Bool ∧
+  type_assignable Γ T e.
+Proof. inversion 1; subst; eauto 10. Qed.
+
+Lemma app_inversion Γ e eT B':
+  TY Γ ⊢ (App e eT) : B' →
+  ∃ x T U,
+  B' = (subst' x eT U) ∧
+  TY Γ ⊢ e : (Pi x T U) ∧
+  type_assignable Γ T eT.
+Proof. inversion 1; subst; eauto 10. Qed.
+
+(* TODO: ... *)
+
+
+
+
+(*
+closed under Γ then also under Δ
+*)
+(* Lemma syn_typed_weakening Γ Δ e A X:
+  TY Δ ⊢ e : A →
+  Γ ⊆ Δ →
+  (* is_closed (dom Γ) e → *)
+  (∀ x, x ∈ dom Γ → x ∈ X) →
+  is_closed X e →
+  TY Γ ⊢ e : A.
+Proof.
+  intros Hty Hsub Hx Hcl.
+  induction Hty; eauto.
+  - (* var *) econstructor. by eapply lookup_weaken. *)
+
+
+(*
+Substitution lemmas
+|- e' : A
+Γ, x : A ⊢ e : B
+=================
+Γ ⊢ e[e'/x] : B[e'/x]
+
+Note: Importantly, we need to substitute in the type as well as it might contain/depend on the variable x.
+
+Also see page 55 in
+https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf
+*)
+Lemma typed_substitutivity e e' Γ (x: string) A B :
+  TY Γ ⊢ e' : A →
+  TY (<[x := A]> Γ) ⊢ e : B →
+  (* TODO: replace in Gamma/ use Γ, x:A, Δ *)
+  TY Γ ⊢ lang.subst x e' e : lang.subst x e' B.
+Proof.
+  intros He' H.
+  dependent induction H;simpl;eauto.
+  - (* var *)
+    destruct decide;subst.
+    (*
+    TODO: need A is closed under Γ by closed typing => subst does nothing
+    *)
+    + rewrite lookup_insert in H. inversion H;subst. 
+      admit.
+    + econstructor.
+      * rewrite lookup_insert_ne in H; eauto.
+        admit.
+      * eapply IHsyn_typed;first eassumption. easy.
+Restart.
+  intros He'. 
+  (* induction e in x, A, e', B, Γ, He' |-*; intros He; simpl. *)
+  induction e in B, Γ, He' |-*; intros He; simpl.
+  (* star, box, bot, nat, idx *)
+  (* reversed weakening => additional assumptions not needed if closed 
+  for cases without var *)
+  all: try (by (inversion He; subst; eauto)).
+  - apply var_inversion in He. 
+    destruct (decide (x0 = x)); subst.
+    + rewrite lookup_insert in He. inversion He; subst. eauto.
+    + rewrite lookup_insert_ne in He; eauto.
+  - (* pi *)
+    destruct x0. 
+    + (* pi anon *)
+      apply pi_anon_inversion in He. destruct He as (sT & sU & H1 & H2 & H3).
+      econstructor; eauto.
+    + (* pi named *)
+      apply pi_inversion in He. destruct He as (sT & sU & H1 & H2 & H3).
+      econstructor.
+      3: eassumption.
+      * eapply IHe1; eauto.
+      * destruct decide.
+        -- admit. (* TODO: look at this *)
+        -- apply IHe2; admit.
+  - (* lam *)
+    destruct x0;simpl.
+    + (* lam anon *)
+      apply lam_anon_inversion in He. destruct He as (sT & sU & H1 & H2 & H3 & H4 & H5).
+      subst. 
+      eapply typed_lam_anon; eauto.
+      econstructor.
+      econstructor; eauto.
+      admit. (* TODO: needs assignable induction *)
+
+
+
+(*
+canonical values
+(specific type, rest generic, and is value expression)
+
+
+Progress (Subject reduction)
+|- e : A
+=================
+e is a value or
+exists e' s.t. e -> e'
+
+
+(some subst lemmas and context lemmas)
+
+Preservation over base step
+Preservation over context step (corollary)
+
+Together type safety (corollary)
+*)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (** *** Lemmas about [type_wf] *)
 Lemma type_wf_mono n m A:
@@ -473,23 +669,13 @@ Proof.
   eapply map_fmap_mono.
 Qed.
 
-Lemma typed_weakening n m Γ Δ e A:
+(* Lemma typed_weakening n m Γ Δ e A:
   TY n; Γ ⊢ e : A →
   Γ ⊆ Δ →
   n ≤ m →
   TY m; Δ ⊢ e : A.
 Proof.
-  induction 1 as [| n Γ x e A B Htyp IH | | n Γ e A Htyp IH | | |n Γ A B e e' x Hwf H1 IH1 H2 IH2 | | | | | | | | |  | | | | ] in Δ, m |-*; intros Hsub Hle; eauto using type_wf_mono.
-  - (* var *) econstructor. by eapply lookup_weaken.
-  - (* lam *) econstructor; last by eapply type_wf_mono. eapply IH; eauto. by eapply insert_mono.
-  - (* tlam *) econstructor. eapply IH; last by lia. by eapply renaming_inclusion.
-  - (* pack *)
-    econstructor; last naive_solver. all: (eapply type_wf_mono; [ done | lia]).
-  - (* unpack *) econstructor.
-    + eapply type_wf_mono; done.
-    + eapply IH1; done.
-    + eapply IH2; last lia. apply insert_mono. by apply renaming_inclusion.
-Qed.
+Qed. *)
 
 Lemma type_wf_subst_dom σ τ n A:
   type_wf n A →
@@ -521,7 +707,7 @@ Proof.
 Qed.
 
 (** Typing inversion lemmas *)
-Lemma var_inversion Γ n (x: string) A: TY n; Γ ⊢ x : A → Γ !! x = Some A.
+(* Lemma var_inversion Γ n (x: string) A: TY n; Γ ⊢ x : A → Γ !! x = Some A.
 Proof. inversion 1; subst; auto. Qed.
 
 Lemma lam_inversion n Γ (x: string) e C:
@@ -602,7 +788,7 @@ Proof. inversion 1; subst; eauto. Qed.
 Lemma case_inversion n Γ e e1 e2 A :
   TY n; Γ ⊢ Case e e1 e2 : A →
   ∃ B C, TY n; Γ ⊢ e : B + C ∧ TY n; Γ ⊢ e1 : (B → A) ∧ TY n; Γ ⊢ e2 : (C → A).
-Proof. inversion 1; subst; eauto. Qed.
+Proof. inversion 1; subst; eauto. Qed. *)
 
 
 Lemma typed_substitutivity n e e' Γ (x: string) A B :

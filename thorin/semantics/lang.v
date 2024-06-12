@@ -97,7 +97,8 @@ Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
   (* let recursive_under y expr := subst_if_not subst y x es expr in *)
   let recurse_under y expr := if decide (y = BNamed x) then expr else subst x es expr in
   match e with
-  | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _ | Var _ => e
+  | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _  => e
+  | Var y => if decide (y = x) then es else e
   (* replace x in T, replace in U if not x *)
   | Pi y T U => 
     (* Pi y (subst x es T) (subst_if_not subst y x es U) *)
