@@ -470,6 +470,14 @@ Proof.
   - (* var *) econstructor. by eapply lookup_weaken. *)
 
 
+Lemma kind_subst_invariant xs s x es:
+  kind_dominance xs s →
+  subst x es s = s /\ Forall (λ s, subst x es s = s) xs.
+Proof.
+  induction 1;simpl;split;try destruct IHkind_dominance.
+  all: eauto.
+Qed.
+
 (*
 Substitution lemmas
 |- e' : A
@@ -482,26 +490,83 @@ Note: Importantly, we need to substitute in the type as well as it might contain
 Also see page 55 in
 https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf
 *)
-Lemma typed_substitutivity e e' Γ (x: string) A B :
-  TY Γ ⊢ e' : A →
-  TY (<[x := A]> Γ) ⊢ e : B →
-  (* TODO: replace in Gamma/ use Γ, x:A, Δ *)
-  TY Γ ⊢ lang.subst x e' e : lang.subst x e' B.
+Lemma typed_substitutivity e e' Γ (a: string) A B :
+  TY ∅ ⊢ e' : A →
+  TY (<[a := A]> Γ) ⊢ e : B →
+  (* TODO: replace in Gamma/ use Γ, x:A, Δ  (some common prefix of all typing derivations here) *)
+  (* TY Γ ⊢ lang.subst x e' e : lang.subst x e' B. *)
+  TY ((subst a e') <$> Γ) ⊢ lang.subst a e' e : lang.subst a e' B.
+  (*
+  TODO: a can be free in e (whole idea of this lemma)
+  however, a should not clash with a binder (why?) as it ruins the induction hypothesis
+  *)
 Proof.
-  intros He' H.
-  dependent induction H;simpl;eauto.
+  intros He'. 
+  induction e in B, Γ, He' |-*; intros He; simpl.
+  all: try (by (inversion He; subst; eauto)).
   - (* var *)
-    destruct decide;subst.
+    apply var_inversion in He. 
+    destruct (decide (x = a)); subst.
+    + rewrite lookup_insert in He. admit. (* holds under subst A = A *)
+    + rewrite lookup_insert_ne in He; eauto.
+      destruct He as [sB [Hlookup HtyA]].
+      econstructor.
+      (* TODO: here, subst B : ... is missing => needs hypothesis 
+      => inversion lemmas alone are not enough due to dependencies
+      *)
+
+
+
+  Restart.
     (*
     TODO: need A is closed under Γ by closed typing => subst does nothing
+    same for Gamma (maybe as assumption)
     *)
+  assert (lang.subst a e' A = A) as HsubstA by admit.
+  intros He' H.
+  dependent induction H;simpl;eauto.
+  (* 
+  TODO: we should probably use the inversion lemmas instead
+  => would probably(?) make induction on statement redundant (but do we have the necessary IHs?)
+  *)
+  - (* var *)
+    destruct decide;subst.
     + rewrite lookup_insert in H. inversion H;subst. 
-      admit.
+      rewrite HsubstA.
+      eapply typed_weakening;first eassumption.
+      apply map_empty_subseteq.
     + econstructor.
       * rewrite lookup_insert_ne in H; eauto.
+        now rewrite lookup_fmap H;simpl.
+      * eapply IHsyn_typed;first eassumption; easy.
+  - (* Pi *)
+    econstructor.
+    3: {
+      pose proof H1.
+      apply kind_subst_invariant with (x:=a) (es:=e') in H2 as [H3 H2].
+      inversion_clear H2.
+      inversion_clear H5.
+      rewrite <- H2 in H1.
+      rewrite <- H3 in H1.
+      rewrite <- H4 in H1.
+      apply H1.
+    }
+    + eapply IHsyn_typed1; eauto.
+    + destruct decide.
+      * symmetry in e. inversion e ;subst.
+        (* replace (<[a:=subst a e' T]> (subst a e' <$> Γ)) with ((subst a e') <$> (<[a:=T]> Γ)) by apply fmap_insert. *)
+        (* TODO: we should not subst under U => need to know that x already bounds? *)
+
+        (* TODO: do we need to rule this case out (binder same name as subst variable?) or do we need stronger subst statements about expression/type subst (maybe independent) *)
         admit.
-      * eapply IHsyn_typed;first eassumption. easy.
-Restart.
+      * replace ( <[x:=subst a e' T]> (subst a e' <$> Γ)) with ((subst a e') <$> (<[x:=T]> Γ)) by apply fmap_insert.
+        eapply IHsyn_typed2;eauto.
+        apply insert_commute. congruence.
+  - (* pi anon *)
+
+
+
+Restart. (* old attempt without dependent subst in type *)
   intros He'. 
   (* induction e in x, A, e', B, Γ, He' |-*; intros He; simpl. *)
   induction e in B, Γ, He' |-*; intros He; simpl.
