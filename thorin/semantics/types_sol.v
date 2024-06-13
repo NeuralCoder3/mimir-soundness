@@ -478,6 +478,44 @@ Proof.
   all: eauto.
 Qed.
 
+Corollary kind_subst_invariant_apply s1 s2 s x es:
+  kind_dominance [s1;s2] s →
+  kind_dominance [subst x es s1;subst x es s2] (subst x es s).
+Proof.
+  intros H. 
+  pose proof H.
+  apply kind_subst_invariant with (x:=x)(es:=es) in H as [H1 H2].
+  inversion_clear H2.
+  inversion_clear H3.
+  rewrite H1. rewrite H. rewrite H2.
+  assumption.
+Qed.
+
+
+Corollary subst_map x a e' T Γ:
+<[x:=subst a e' T]> (subst a e' <$> Γ) = subst a e' <$> (<[x:=T]> Γ).
+Proof.
+  now rewrite fmap_insert.
+Qed.
+
+Lemma subst_distr x a e1 e2 e3:
+  subst a e1 (subst x e2 e3) = subst x (subst a e1 e2) (subst a e1 e3).
+Proof.
+  (* induction e';simpl;eauto 10.
+  - destruct decide;subst;simpl;eauto;destruct decide;subst;eauto;simpl.
+  all: admit.
+  -  *)
+Admitted.
+
+Corollary subst'_distr x a e1 e2 e3:
+  subst a e1 (subst' x e2 e3) = subst' x (subst a e1 e2) (subst a e1 e3).
+Proof.
+  destruct x;simpl.
+  - reflexivity.
+  - apply subst_distr.
+Qed.
+
+
 (*
 Substitution lemmas
 |- e' : A
@@ -512,7 +550,7 @@ Proof.
       destruct He as [sB [Hlookup HtyA]].
       econstructor.
       (* TODO: here, subst B : ... is missing => needs hypothesis 
-      => inversion lemmas alone are not enough due to dependencies
+      => induction e + inversion lemmas alone are not enough due to dependencies
       *)
 
 
@@ -541,16 +579,7 @@ Proof.
       * eapply IHsyn_typed;first eassumption; easy.
   - (* Pi *)
     econstructor.
-    3: {
-      pose proof H1.
-      apply kind_subst_invariant with (x:=a) (es:=e') in H2 as [H3 H2].
-      inversion_clear H2.
-      inversion_clear H5.
-      rewrite <- H2 in H1.
-      rewrite <- H3 in H1.
-      rewrite <- H4 in H1.
-      apply H1.
-    }
+    3: apply kind_subst_invariant_apply,H1.
     + eapply IHsyn_typed1; eauto.
     + destruct decide.
       * symmetry in e. inversion e ;subst.
@@ -559,12 +588,102 @@ Proof.
 
         (* TODO: do we need to rule this case out (binder same name as subst variable?) or do we need stronger subst statements about expression/type subst (maybe independent) *)
         admit.
-      * replace ( <[x:=subst a e' T]> (subst a e' <$> Γ)) with ((subst a e') <$> (<[x:=T]> Γ)) by apply fmap_insert.
+      * rewrite subst_map.
         eapply IHsyn_typed2;eauto.
         apply insert_commute. congruence.
   - (* pi anon *)
-
-
+    econstructor.
+    (* 3: {
+      pose proof H1.
+      apply kind_subst_invariant with (x:=a) (es:=e') in H2 as [H3 H4].
+      inversion_clear H4.
+      inversion_clear H5.
+      rewrite <- H3 in H1.
+      rewrite <- H2 in H1.
+      rewrite <- H4 in H1.
+      apply H1.
+    } *)
+    + eapply IHsyn_typed1; eauto.
+    + eapply IHsyn_typed2; eauto.
+    + now apply kind_subst_invariant_apply.
+  - (* Lambda named *)
+    destruct decide.
+    + (* TODO: should not happen *)
+      admit.
+    + econstructor.
+      * eapply IHsyn_typed1;eauto.
+      * rewrite subst_map.
+        eapply IHsyn_typed2;eauto.
+        apply insert_commute. congruence.
+      * rewrite subst_map.
+        eapply IHsyn_typed3;eauto.
+        apply insert_commute. congruence.
+      * admit. (* needs assignable induction *)
+  - (* Lambda anon *)
+    econstructor.
+    + eapply IHsyn_typed1;eauto.
+    + eapply IHsyn_typed2;eauto.
+    + eapply IHsyn_typed3;eauto.
+    + admit. (* needs assignable induction *)
+  - (* App *)
+    rewrite subst'_distr.
+    eapply typed_app.
+    + cbn in IHsyn_typed.
+      specialize (IHsyn_typed Γ a A).
+      (* TODO: no name clash *)
+      replace (if decide (x = a) then U else subst a e' U) with (subst a e' U) in IHsyn_typed by admit.
+      apply IHsyn_typed;eauto.
+    + admit. (* needs assignable induction *)
+  - (* Sigma *)
+    econstructor.
+    + eapply IHsyn_typed1;eauto.
+    + rewrite subst_map.
+      specialize (IHsyn_typed2 (<[x:=T]> Γ) a A).
+      simpl in IHsyn_typed2.
+      destruct decide.
+      1: admit. (* TODO: no name clash *)
+      apply IHsyn_typed2;eauto.
+      apply insert_commute. congruence.
+    + apply kind_subst_invariant_apply;eassumption.
+  - (* Sigma anon *)
+    econstructor.
+    + eapply IHsyn_typed1;eauto.
+    + eapply IHsyn_typed2;eauto.
+    + apply kind_subst_invariant_apply;eassumption.
+  - (* Tuple *)
+    admit. (* TODO: check typing rule, nested induction *)
+  - (* Array *)
+    econstructor.
+    + eapply IHsyn_typed1;eauto.
+    + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
+      rewrite subst_map.
+      destruct decide.
+      1: admit. (* TODO: no name clash *)
+      eapply IHsyn_typed2;eauto.
+      apply insert_commute. congruence.
+  - (* Pack *)
+    econstructor.
+    + eapply IHsyn_typed1;eauto.
+    + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
+      rewrite subst_map.
+      destruct decide.
+      1: admit. (* TODO: no name clash *)
+      eapply IHsyn_typed2;eauto.
+      apply insert_commute. congruence.
+  - (* Extract array *)
+    rewrite subst'_distr.
+    eapply typed_extract_array.
+    + specialize (IHsyn_typed1 Γ a A).
+      simpl in IHsyn_typed1.
+      destruct decide.
+      1: admit. (* TODO: no name clash *)
+      eapply IHsyn_typed1;eauto.
+    + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
+      eapply IHsyn_typed2;eauto.
+  - (* Extract tuple *)
+    eapply typed_extract_tuple with (n:=length Ts);eauto.
+    admit. (* TODO: fold subst keeps length *)
+Admitted.
 
 Restart. (* old attempt without dependent subst in type *)
   intros He'. 
