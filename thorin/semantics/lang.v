@@ -89,19 +89,13 @@ Inductive is_val : expr → Prop :=
     is_val (Pack x en e)
   .
 
-(* Definition subst_if_not subst (b:binder) (x:string) (es:expr) (e:expr) :=
-  if decide (b = BNamed x) then e else subst x es e. *)
-
-
 Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
-  (* let recursive_under y expr := subst_if_not subst y x es expr in *)
   let recurse_under y expr := if decide (y = BNamed x) then expr else subst x es expr in
   match e with
   | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _  => e
   | Var y => if decide (y = x) then es else e
   (* replace x in T, replace in U if not x *)
   | Pi y T U => 
-    (* Pi y (subst x es T) (subst_if_not subst y x es U) *)
     Pi y (subst x es T) (recurse_under y U)
   (* replace x in T, f, U, and e only if not x *)
   | Lam y T f U e => 
@@ -109,12 +103,7 @@ Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
       (recurse_under y f)
       (recurse_under y U)
       (recurse_under y e)
-      (* (subst_if_not subst y x es f) 
-      (subst_if_not subst y x es U) 
-      (subst_if_not subst y x es e) *)
   | App e1 e2 => App (subst x es e1) (subst x es e2)
-  (* | Sigma [] => Sigma []
-  | Sigma ((y, T) :: args) => Sigma ((y, subst x es T) :: map (λ '(y, T), (y, subst x es T)) args) *)
   (* map over nested induction 
   => use inner fixpoint 
   mutual recursion is not recognized (https://coq.discourse.group/t/mutual-recursion-for-nested-inductive-types/729/3)
@@ -122,11 +111,6 @@ Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
    *)
   | Tuple expression =>
     Tuple (map (subst x es) expression)
-    (* Tuple ((fix map_subst (es' : list expr) : list expr :=
-      match es' with
-      | [] => []
-      | e :: es' => subst x es e :: map_subst es'
-      end) expression) *)
   (* for Sigma, we only continue subst in args if not already encountered var *)
   | Sigma xs =>
     Sigma ((fix fold_subst (xs : list (binder * expr)) : list (binder * expr) :=
@@ -170,8 +154,7 @@ Inductive base_step : expr -> expr -> Prop :=
     base_step (Extract (Tuple es) (LitIdx n i)) e
   (* extract of pack *)
   | IotaPackS x e n ei e':
-    (* ei = LitIdx n i -> *)
-    is_val ei -> (* implies ei = LitIdx n i *)
+    is_val ei -> (* implies ei = LitIdx n i (via canonical values?) *)
     e' = subst' x ei e ->
     base_step (Extract (Pack x (LitNat n) e) ei) e'
   .
@@ -308,6 +291,10 @@ Fixpoint is_closed (X : list string) (e : expr) : bool :=
   | Extract e ei => is_closed X e && is_closed X ei
   end.
 
+(* TODO: where do we need those lemmas?
+  TODO: There are better ways to handle (or not) closedness
+*)
+
 (** [closed] states closedness as a Coq proposition, through the [Is_true] transformer. *)
 Definition closed (X : list string) (e : expr) : Prop := Is_true (is_closed X e).
 #[export] Instance closed_proof_irrel X e : ProofIrrel (closed X e).
@@ -370,6 +357,20 @@ Proof. intros. destruct x as [ | x]. { done. } by apply subst_is_closed_nil. Qed
 
 
 (* we derive a few lemmas about contextual steps *)
+(*
+we need these lemmas for progress
+=> if inner expression not value, we can lift a contextual step over a context
+however, the context is an indirection over a simplification requiring a lemma to ease the automation burdon
+*)
+
+Lemma contextual_step_lam x ef U e T T':
+  contextual_step T T' →
+  contextual_step (Lam x T ef U e) (Lam x T' ef U e).
+  Proof.
+    intros Hcontextual.
+    by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
+  Qed.
+
 Lemma contextual_step_app_l e1 e1' e2:
   contextual_step e1 e1' →
   contextual_step (App e1 e2) (App e1' e2).
@@ -387,136 +388,11 @@ Proof.
   by apply (fill_contextual_step (AppRCtx e1 HoleCtx H)).
 Qed.
 
-
-
-
-
-
-
-
-
-(* TODO: complete other lemmata about contextual steps *)
-
-
-
-(* Lemma contextual_step_tapp e e':
-  contextual_step e e' →
-  contextual_step (TApp e) (TApp e').
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (TAppCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_pack e e':
-  contextual_step e e' →
-  contextual_step (Pack e) (Pack e').
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (PackCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_unpack x e e' e2:
-  contextual_step e e' →
-  contextual_step (Unpack x e e2) (Unpack x e' e2).
-  Proof.
-    intros Hcontextual.
-    by eapply (fill_contextual_step (UnpackCtx x HoleCtx e2)).
-  Qed.
-
-Lemma contextual_step_unop op e e':
-  contextual_step e e' →
-  contextual_step (UnOp op e) (UnOp op e').
-  Proof.
-    intros Hcontextual.
-    by eapply (fill_contextual_step (UnOpCtx op HoleCtx)).
-  Qed.
-
-Lemma contextual_step_binop_l op e1 e1' e2:
-  is_val e2 →
-  contextual_step e1 e1' →
-  contextual_step (BinOp op e1 e2) (BinOp op e1' e2).
-Proof.
-  intros [v <-%of_to_val]%is_val_spec Hcontextual.
-  by eapply (fill_contextual_step (BinOpLCtx op HoleCtx v)).
-Qed.
-
-Lemma contextual_step_binop_r op e1 e2 e2':
-  contextual_step e2 e2' →
-  contextual_step (BinOp op e1 e2) (BinOp op e1 e2').
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (BinOpRCtx op e1 HoleCtx)).
-Qed.
-
-Lemma contextual_step_if e e' e1 e2:
-  contextual_step e e' →
-  contextual_step (If e e1 e2) (If e' e1 e2).
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (IfCtx HoleCtx e1 e2)).
-Qed.
-
-Lemma contextual_step_pair_l e1 e1' e2:
-  is_val e2 →
-  contextual_step e1 e1' →
-  contextual_step (Pair e1 e2) (Pair e1' e2).
-Proof.
-intros [v <-%of_to_val]%is_val_spec Hcontextual.
-by eapply (fill_contextual_step (PairLCtx HoleCtx v)).
-Qed.
-
-Lemma contextual_step_pair_r e1 e2 e2':
-contextual_step e2 e2' →
-contextual_step (Pair e1 e2) (Pair e1 e2').
-Proof.
-intros Hcontextual.
-by eapply (fill_contextual_step (PairRCtx e1 HoleCtx)).
-Qed.
-
-
-Lemma contextual_step_fst e e':
-contextual_step e e' →
-contextual_step (Fst e) (Fst e').
-Proof.
-intros Hcontextual.
-by eapply (fill_contextual_step (FstCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_snd e e':
-contextual_step e e' →
-contextual_step (Snd e) (Snd e').
-Proof.
-intros Hcontextual.
-by eapply (fill_contextual_step (SndCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_injl e e':
-contextual_step e e' →
-contextual_step (InjL e) (InjL e').
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (InjLCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_injr e e':
-contextual_step e e' →
-contextual_step (InjR e) (InjR e').
-Proof.
-  intros Hcontextual.
-  by eapply (fill_contextual_step (InjRCtx HoleCtx)).
-Qed.
-
-Lemma contextual_step_case e e' e1 e2:
-contextual_step e e' →
-contextual_step (Case e e1 e2) (Case e' e1 e2).
-Proof.
-intros Hcontextual.
-by eapply (fill_contextual_step (CaseCtx HoleCtx e1 e2)).
-Qed.
-
 #[export]
 Hint Resolve
-contextual_step_app_l contextual_step_app_r contextual_step_binop_l contextual_step_binop_r
-contextual_step_case contextual_step_fst contextual_step_if contextual_step_injl contextual_step_injr
-contextual_step_pack contextual_step_pair_l contextual_step_pair_r contextual_step_snd contextual_step_tapp
-contextual_step_tapp contextual_step_unop contextual_step_unpack : core. *)
+  contextual_step_lam
+  contextual_step_app_l
+  contextual_step_app_r
+  : core.
+
+(* TODO: complete other lemmata about contextual steps *)
