@@ -5,109 +5,26 @@ From thorin Require Import lang notation.
 Require Import Coq.Program.Equality.
 (* From Autosubst Require Export Autosubst. *)
 
-(** ** Syntactic typing *)
-(** We use De Bruijn indices with the help of the Autosubst library. *)
-(* Inductive type : Type :=
-  (** [var] is the type of variables of Autosubst -- it unfolds to [nat] *)
-  | TVar : var → type
-  | Int
-  | Bool
-  | Unit
-  (** The [{bind 1 of type}] tells Autosubst to put a De Bruijn binder here *)
-  | TForall : {bind 1 of type} → type
-  | TExists : {bind 1 of type} → type
-  | Fun (A B : type)
-  | Prod (A B : type)
-  | Sum (A B : type). *)
+(*
+  Usually, typing uses deBrujin indices for naming
+  this makes freshness, no-clash easy
 
-(** Autosubst instances.
-  This lets Autosubst do its magic and derive all the substitution functions, etc.
- *)
-(* #[export] Instance Ids_type : Ids type. derive. Defined.
-#[export] Instance Rename_type : Rename type. derive. Defined.
-#[export] Instance Subst_type : Subst type. derive. Defined.
-#[export] Instance SubstLemmas_typer : SubstLemmas type. derive. Qed.
+  Our case is special in multiple ways:
+  - types and expressions are the same
+  - evaluation also happens in types
+  - we have multiple kind levels (the type of types has a type (at which level we get impredicative))
+  - our typing is mutual recursive with an assignability relation
+  - we have nested inductive predicates
 
-Print Subst.
-Print SubstLemmas. *)
+  Autosubst has support for De Bruijn indices and their substitution
+  Usually, the typing is annotated with the type level in the presence of indices
+  and lifting lemmas are defined
+*)
 
 Definition typing_context := gmap string expr.
 Implicit Types
   (Γ : typing_context)
   (e : expr).
-
-(* Declare Scope FType_scope.
-Delimit Scope FType_scope with ty.
-Bind Scope FType_scope with type.
-Notation "# x" := (TVar x) : FType_scope.
-Infix "→" := Fun : FType_scope.
-Notation "(→)" := Fun (only parsing) : FType_scope.
-Notation "∀: τ" :=
-  (TForall τ%ty)
-  (at level 100, τ at level 200) : FType_scope.
-Notation "∃: τ" :=
-  (TExists τ%ty)
-  (at level 100, τ at level 200) : FType_scope.
-Infix "×" := Prod (at level 70) : FType_scope.
-Notation "(×)" := Prod (only parsing) : FType_scope.
-Infix "+" := Sum : FType_scope.
-Notation "(+)" := Sum (only parsing) : FType_scope. *)
-
-
-(** Shift all the indices in the context by one,
-   used when inserting a new type interpretation in Δ. *)
-(* [<$>] is notation for the [fmap] operation that maps the substitution over the whole map. *)
-(* [ren] is Autosubst's renaming operation -- it renames all type variables according to the given function,
-  in this case [(+1)] to shift the variables up by 1. *)
-(* Notation "⤉ Γ" := (Autosubst_Classes.subst (ren (+1)) <$> Γ) (at level 10, format "⤉ Γ"). *)
-
-
-(** [type_wf n A] states that a type [A] has only free variables up to < [n].
- (in other words, all variables occurring free are strictly bounded by [n]). *)
-(* Inductive type_wf : nat → type → Prop :=
-  | type_wf_TVar m n:
-      m < n →
-      type_wf n (TVar m)
-  | type_wf_Int n: type_wf n Int
-  | type_wf_Bool n : type_wf n Bool
-  | type_wf_Unit n : type_wf n Unit
-  | type_wf_TForall n A :
-      type_wf (S n) A →
-      type_wf n (TForall A)
-  | type_wf_TExists n A :
-      type_wf (S n) A →
-      type_wf n (TExists A)
-  | type_wf_Fun n A B:
-      type_wf n A →
-      type_wf n B →
-      type_wf n (Fun A B)
-  | type_wf_Prod n A B :
-      type_wf n A →
-      type_wf n B →
-      type_wf n (Prod A B)
-  | type_wf_Sum n A B :
-      type_wf n A →
-      type_wf n B →
-      type_wf n (Sum A B) 
-. 
-*)
-
-(* #[export] Hint Constructors type_wf : core. *)
-
-(* Inductive bin_op_typed : bin_op → type → type → type → Prop :=
-  | plus_op_typed : bin_op_typed PlusOp Int Int Int
-  | minus_op_typed : bin_op_typed MinusOp Int Int Int
-  | mul_op_typed : bin_op_typed MultOp Int Int Int
-  | lt_op_typed : bin_op_typed LtOp Int Int Bool
-  | le_op_typed : bin_op_typed LeOp Int Int Bool
-  | eq_op_typed : bin_op_typed EqOp Int Int Bool.
-#[export] Hint Constructors bin_op_typed : core.
-
-Inductive un_op_typed : un_op → type → type → Prop :=
-  | neg_op_typed : un_op_typed NegOp Bool Bool
-  | minus_un_op_typed : un_op_typed MinusUnOp Int Int. *)
-
-(* Reserved Notation "[ s1 s2 .. sn ] ⇝ s" (at level 74, s at level 0). *)
 
 Inductive kind_dominance: list expr -> expr -> Prop :=
   | empty_dom: kind_dominance [] Star
@@ -122,8 +39,10 @@ Inductive kind_dominance: list expr -> expr -> Prop :=
 
 Definition Bool := App Idx 2.
 
-
 (* TODO: check with page 46 in https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf *)
+
+(* TODO: kind vs sort *)
+Definition sort s := s = Star \/ s = Box.
 
 Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
 Reserved Notation "'TY' Γ ⊢ A ← e" (at level 74, e, A at next level).
@@ -222,10 +141,13 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ (Tuple es) : T
     | typed_arr Γ x en T s:
       (* TODO: mistake in pdf (s vs s') *)
+      (* TODO: s should be a kind (it is not restricted in Pdf) => why does it need to be a kind? Why can't we have <<x:5;5>> with s = Nat *)
+      sort s →
       TY Γ ⊢ en : Nat →
       TY (<[x := App Idx en]> Γ) ⊢ T : s →
       TY Γ ⊢ (Array (BNamed x) en T) : s
     | typed_arr_anon Γ en T s:
+      sort s →
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ T : s →
       TY Γ ⊢ (Array BAnon en T) : s
@@ -262,7 +184,6 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
-  (* TODO: tuple assignable *)
   | assignable_sigma Γ Ts e:
       (* 
         TODO:
@@ -275,14 +196,11 @@ where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 #[export] Hint Constructors syn_typed : core.
 
 (*
-Thoughts on tuple types:
+Thoughts on tuple types: do they make sense?
 
 (bool, λ (x:bool) : Nat, if x then 1 else 0) : [Bool, Bool -> Nat]
 (bool, λ (x:bool) : Nat, if x then 1 else 0) : [T:*, Π x:T, Nat] (or [T:*, T -> Nat])
 (T, λ (x:T) : Nat, 42) : [T:*, Π x:T, Nat]
-
-
-
 
   |- bool : * (via app, Idx, Nat)
     x:bool |- Nat <- if x then 1 else 0
@@ -302,17 +220,79 @@ then our expression should be assignable via
 |- [T:*, T -> Nat] <- (bool, λ (x:bool) : Nat, if x then 1 else 0)
 
 so at application point, it works out
-
 *)
 
 
-(* Lemma untyped_empty_extract:
-  ~ (exists Γ ei T, TY Γ ⊢ (Extract (Tuple []) ei) : T).
+Lemma canonical_kind xs s:
+  kind_dominance xs s →
+  sort s.
 Proof.
-  intros (Γ&ei&T&H).
-  inversion H; subst.
-  - admit.
-  - inversion H4;subst. *)
+  intros H.
+  induction H;auto;firstorder.
+Qed.
+
+
+(* is it sufficient to have n fixed as a nat or do we want more generally ⊢ en : Nat *)
+Lemma canonical_value_idx Γ e (n:nat):
+  TY Γ ⊢ e : Idx (LitNat n) ->
+  is_val e ->
+  exists i, e = LitIdx n i.
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst.
+  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
+  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
+  - inversion H0;subst. simpl in H. congruence.
+  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
+  - inversion H;congruence. (* Array named *)
+  - inversion H;congruence. (* Array anon *)
+Qed.
+
+(*
+  We take a look at a (possibly) interesting example to get a feeling for the type system
+  There is no invalid extract.
+  Especially, we never can extract from an empty tuple
+*)
+Example untyped_empty_extract:
+    (* we might as well assume ei is a value
+      (by soundess, we can evaluate to a value)
+    *)
+  ~ (exists Γ ei T, 
+      (* Simplifying assumption (see above) *)
+      is_val ei /\
+      (* TODO: is it valid to assume that T is also a value? *)
+      (* is_val T /\ *)
+      TY Γ ⊢ (Extract (Tuple []) ei) : T).
+Proof.
+  intros (Γ&ei&T&(Hv&Hty)).
+  inversion Hty;subst.
+  - (* array extract *)
+    (* we have Tuple [] : Array x en T0 *)
+    (* => the nat literal en is a nat 0 *)
+    inversion H2;subst;clear H2.
+    inversion H0;subst;clear H0.
+    simpl in H3.
+    congruence. (* TODO: this currently just works because normalization is not implemented *)
+  - (* sigma tuple extract *)
+    (*
+      proof idea:
+      ei is a Idx 0
+      because length Ts = 0 where Ts is the sigma type
+    *)
+    clear Hty.
+    assert (Ts = []) as ->.
+    {
+      inversion H1;subst.
+      inversion H0;subst.
+      simpl in *.
+      inversion H4;subst.
+      done.
+    }
+    simpl in H3.
+    pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
+    inversion i.
+Qed.
 
 
 
@@ -323,9 +303,7 @@ Proof.
 
 
 
-
-
-
+(* TODO: why do we need this proof? *)
 Lemma syn_typed_closed Γ e A X :
   TY Γ ⊢ e : A →
   (∀ x, x ∈ dom Γ → x ∈ X) →
@@ -399,7 +377,6 @@ Proof.
   }
 Admitted.
 
-
 Lemma typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
   Γ ⊆ Δ →
@@ -446,12 +423,15 @@ e.g. for substitution
 however, we need dependent induction as we need inductive knowledge about 
 the type derivations for types => any expression induction is insufficient
 => we derive these inversion lemmas on the fly
+
+
+Lemma var_inversion Γ (x: string) A: TY Γ ⊢ x : A → 
+  exists sA, Γ !! x = Some A ∧ TY Γ ⊢ A : sA.
+Proof. inversion 1; subst; eauto. Qed.
 *)
 
 
-(* Lemma var_inversion Γ (x: string) A: TY Γ ⊢ x : A → 
-  exists sA, Γ !! x = Some A ∧ TY Γ ⊢ A : sA.
-Proof. inversion 1; subst; eauto. Qed.
+(* 
 
 Lemma pi_inversion Γ T x U s:
   TY Γ ⊢ (Pi (BNamed x) T U) : s →
@@ -498,6 +478,10 @@ Proof. inversion 1; subst; eauto 10. Qed. *)
 
 (*
 closed under Γ then also under Δ
+
+(inverse weakening)
+could be helpful, but where is applies, a simple inversion
+is usually easier/faster
 *)
 (* Lemma syn_typed_weakening Γ Δ e A X:
   TY Δ ⊢ e : A →
@@ -506,12 +490,14 @@ closed under Γ then also under Δ
   (∀ x, x ∈ dom Γ → x ∈ X) →
   is_closed X e →
   TY Γ ⊢ e : A.
-Proof.
-  intros Hty Hsub Hx Hcl.
-  induction Hty; eauto.
-  - (* var *) econstructor. by eapply lookup_weaken. *)
+*)
 
 
+(*
+  Lemmas that come up at some points and are helpful to have extra to clean up the proof
+  Especially since we only use kind_dominance binary, 
+  a subst idempotency lemma specialized for this case is helpful
+*)
 Lemma kind_subst_invariant xs s x es:
   kind_dominance xs s →
   subst x es s = s /\ Forall (λ s, subst x es s = s) xs.
@@ -534,27 +520,49 @@ Proof.
 Qed.
 
 
+(*
+Specialization to subst for fmap_insert since Coq won't recognize (subst a e') as function application point
+*)
 Corollary subst_map x a e' T Γ:
 <[x:=subst a e' T]> (subst a e' <$> Γ) = subst a e' <$> (<[x:=T]> Γ).
 Proof.
   now rewrite fmap_insert.
 Qed.
 
+(*
+  Substitution reordering to distrubte the subst from typing predicates to the outside
+  for induction hypotheses
+*)
 Lemma subst_distr x a e1 e2 e3:
+  a ≠ x →
   subst a e1 (subst x e2 e3) = subst x (subst a e1 e2) (subst a e1 e3).
 Proof.
   (* induction e';simpl;eauto 10.
   - destruct decide;subst;simpl;eauto;destruct decide;subst;eauto;simpl.
   all: admit.
   -  *)
+  intros Hneq.
+  induction e3;simpl;try congruence.
+  - destruct (decide) as [Heq|Heq];simpl.
+    + rewrite Heq. 
+      destruct decide;try congruence.
+      simpl.
+      now destruct decide;congruence.
+    + destruct decide as [Heq'|Heq'].
+      * admit.
+      * simpl. destruct decide;congruence.
+  (* ... *)
 Admitted.
 
 Corollary subst'_distr x a e1 e2 e3:
+  BNamed a ≠ x →
   subst a e1 (subst' x e2 e3) = subst' x (subst a e1 e2) (subst a e1 e3).
 Proof.
+  intros H.
   destruct x;simpl.
   - reflexivity.
   - apply subst_distr.
+    contradict H. congruence.
 Qed.
 
 
@@ -656,6 +664,9 @@ Proof.
     + admit. (* needs assignable induction *)
   - (* App *)
     rewrite subst'_distr.
+    2: {
+      admit. (* TODO: no name clash *)
+    }
     eapply typed_app.
     + cbn in IHsyn_typed.
       specialize (IHsyn_typed Γ a A).
@@ -691,6 +702,7 @@ Proof.
     admit. (* TODO: needs nested induction *)
   - (* Array *)
     econstructor.
+    + destruct H;subst;simpl;[now left|now right].
     + eapply IHsyn_typed1;eauto.
     + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
       rewrite subst_map.
@@ -698,6 +710,11 @@ Proof.
       1: admit. (* TODO: no name clash *)
       eapply IHsyn_typed2;eauto.
       apply insert_commute. congruence.
+  - (* Array anon *)
+    econstructor.
+    + destruct H;subst;simpl;[now left|now right].
+    + eauto.
+    + eauto.
   - (* Pack *)
     econstructor.
     + eapply IHsyn_typed1;eauto.
@@ -709,6 +726,9 @@ Proof.
       apply insert_commute. congruence.
   - (* Extract array *)
     rewrite subst'_distr.
+    2: {
+      admit. (* TODO: no name clash *)
+    }
     eapply typed_extract_array.
     + specialize (IHsyn_typed1 Γ a A).
       simpl in IHsyn_typed1.
@@ -722,20 +742,6 @@ Proof.
     admit. (* TODO: fold subst keeps length *)
 Admitted.
 
-
-Lemma contextual_step_unop x ef U e T T':
-  contextual_step T T' →
-  (* contextual_step (λ: (x : T) @ef : U, e) (λ: (x : T') @ef : U, e). *)
-  contextual_step (Lam x T ef U e) (Lam x T' ef U e).
-  Proof.
-    intros Hcontextual.
-    by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
-  Qed.
-
-#[export]
-Hint Resolve
-  contextual_step_unop
-  : core.
 
 
 (*
@@ -778,21 +784,21 @@ Proof.
         eapply BetaS. 3: reflexivity. 
         1: admit. (* the type of Pi is a value => either not requirement for base step or A should be a value *)
         assumption.
-      * right. destruct HredT. eexists. eauto. admit. (* contextual step lemma *)
-    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+      * right. destruct HredT. eexists. eauto. 
+    + right. destruct H1. eexists. eauto. 
   - (* sigma cons *)
     destruct IHsyn_typed1.
     + destruct IHsyn_typed2.
       * left. now constructor.
       * right. destruct H3. eexists. eauto. admit. (* contextual step lemma *)
     + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
-
+Abort.
 
 
 
 
 (*
-canonical values
+canonical values (see one from above for Idx)
 (specific type, rest generic, and is value expression)
 
 
@@ -827,6 +833,33 @@ Together type safety (corollary)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(**
+================================================================================================
+======================= Here be dragons ========================================================
+================================================================================================
+Old development for guideline ahead, erase while going forward.
+*)
 
 
 
