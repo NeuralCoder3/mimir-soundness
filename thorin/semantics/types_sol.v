@@ -678,12 +678,12 @@ Admitted.
 canonical values (see one from above for Idx)
 (specific type, rest generic, and is value expression)
 
-e : Idx #n 
+  e : Idx #n 
 e : Idx en
-e : Array x en T
-e : Sigma Ts
-e : Pi x T U
-e : Nat
+e : Array x en T (needs normalization lemma)
+  e : Sigma Ts
+  e : Pi x T U
+  e : Nat
 *)
 
 Lemma canonical_kind xs s:
@@ -739,7 +739,6 @@ Ltac no_nonsense_canonical :=
       try (inversion H0;subst;simpl in H;congruence)
     end
   ].
-
 
 
 
@@ -822,6 +821,25 @@ Lemma canonical_value_nat Γ e:
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
+Qed.
+
+Lemma canonical_value_sigma Γ e Ts:
+  TY Γ ⊢ e : Sigma Ts →
+  is_val e ->
+  
+  exists es, e = Tuple es 
+    /\ Forall is_val es
+    /\ length es = length Ts
+    /\ Forall2 (λ e '(x,T), TY Γ ⊢ e : T) es Ts. (* not needed *)
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
+  eexists.
+  split;[reflexivity|].
+  split;[assumption|].
+  inversion H0;subst;clear H0.
+  clear Hty H2 Hv.
+  induction H;simpl;split;auto;destruct IHForall2;auto.
 Qed.
 
 
@@ -932,11 +950,16 @@ Proof.
     + destruct IHsyn_typed2.
       * right.
         pose proof (canonical_value_idx _ _ _ H1 H2) as [i ->].
+        pose proof (canonical_value_sigma _ _ _ H H0) as [es (->&Hval&Hlen&Hty)].
+        pose proof (nth_fin _ es).
+        rewrite Hlen in H3; specialize (H3 i); destruct H3.
         eexists.
         apply base_contextual_step.
         (* IotaTupleS -- we know that e has to be a tuple as a pack will always have array type *)
-        (* TODO: needs canonical value lemma *)
-        admit. (* base step Iota reduction *)
+        apply IotaTupleS.
+        -- assumption.
+        -- assumption.
+        -- apply H3.
       * right. destruct H2. eexists. eauto. 
     + right. destruct H0. eexists. eauto.
 Admitted.
