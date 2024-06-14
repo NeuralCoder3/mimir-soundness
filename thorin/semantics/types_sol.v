@@ -679,8 +679,8 @@ canonical values (see one from above for Idx)
 (specific type, rest generic, and is value expression)
 
   e : Idx #n 
-e : Idx en
-e : Array x en T (needs normalization lemma)
+e : Idx en (unnecessary?)
+  e : Array x en T (changes under normalization lemma)
   e : Sigma Ts
   e : Pi x T U
   e : Nat
@@ -843,6 +843,36 @@ Proof.
 Qed.
 
 
+Definition add_binder x e Γ := 
+  match x with
+  | BAnon => Γ
+  | BNamed x => <[x:=e]> Γ
+  end.
+Transparent add_binder.
+
+
+(* TODO: this changes with normalization *)
+Lemma canonical_value_array Γ e x en T:
+  TY Γ ⊢ e : Array x en T ->
+  is_val e ->
+  
+  exists eb,
+    e = Pack x en eb
+    /\ is_val en
+    /\ TY Γ ⊢ en : Nat
+    /\ TY (add_binder x (Idx en) Γ) ⊢ eb : T.
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;simpl.
+  all: inversion Hv;subst;simpl;try no_nonsense_canonical.
+  - naive_solver.
+  - (* Pack named *)
+    eauto 10.
+  - (* Pack anon *)
+    eauto 10.
+Qed.
+
+
 
 
 (*
@@ -928,20 +958,19 @@ Proof.
     destruct IHsyn_typed1.
     + destruct IHsyn_typed2.
       * right.
+        pose proof (canonical_value_array _ _ _ _ _ H H1) as [eb (->&Hvalen&Htyen&Htyeb)].
+        (* from array, we get that en is a value from there, we get the idx value *)
+        pose proof (canonical_value_nat _ _ Htyen Hvalen) as [n ->].
+        pose proof (canonical_value_idx _ _ _ H0 H2) as [i ->].
         eexists.
         apply base_contextual_step.
+        apply IotaPackS.
+        2: reflexivity.
+        assumption.
         (* 
         TODO: this case will change with normalization
         a tuple as well a pack could have array type
         *)
-        (*
-        TODO: needs canonical value lemma about e : Array x en T
-        we want Pack x #n e
-
-        TODO: also a generalized idx lemma for Idx en (might need a value restriction for en)
-        *)
-        (* eapply IotaPackS. *)
-      admit. (* base step Iota reduction *)
       * right. destruct H2. eexists. eauto. 
     + right. destruct H1. eexists. eauto. 
   - (* extract tuple (sigma type) *)
