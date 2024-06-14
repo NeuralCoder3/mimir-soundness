@@ -223,76 +223,6 @@ so at application point, it works out
 *)
 
 
-Lemma canonical_kind xs s:
-  kind_dominance xs s →
-  sort s.
-Proof.
-  intros H.
-  induction H;auto;firstorder.
-Qed.
-
-
-(* is it sufficient to have n fixed as a nat or do we want more generally ⊢ en : Nat *)
-Lemma canonical_value_idx Γ e (n:nat):
-  TY Γ ⊢ e : Idx (LitNat n) ->
-  is_val e ->
-  exists i, e = LitIdx n i.
-Proof.
-  intros Hty Hv.
-  inversion Hty;subst;try naive_solver;inversion Hv;subst.
-  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
-  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
-  - inversion H0;subst. simpl in H. congruence.
-  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
-  - inversion H;congruence. (* Array named *)
-  - inversion H;congruence. (* Array anon *)
-Qed.
-
-(*
-  We take a look at a (possibly) interesting example to get a feeling for the type system
-  There is no invalid extract.
-  Especially, we never can extract from an empty tuple
-*)
-Example untyped_empty_extract:
-    (* we might as well assume ei is a value
-      (by soundess, we can evaluate to a value)
-    *)
-  ~ (exists Γ ei T, 
-      (* Simplifying assumption (see above) *)
-      is_val ei /\
-      (* TODO: is it valid to assume that T is also a value? *)
-      (* is_val T /\ *)
-      TY Γ ⊢ (Extract (Tuple []) ei) : T).
-Proof.
-  intros (Γ&ei&T&(Hv&Hty)).
-  inversion Hty;subst.
-  - (* array extract *)
-    (* we have Tuple [] : Array x en T0 *)
-    (* => the nat literal en is a nat 0 *)
-    inversion H2;subst;clear H2.
-    inversion H0;subst;clear H0.
-    simpl in H3.
-    congruence. (* TODO: this currently just works because normalization is not implemented *)
-  - (* sigma tuple extract *)
-    (*
-      proof idea:
-      ei is a Idx 0
-      because length Ts = 0 where Ts is the sigma type
-    *)
-    clear Hty.
-    assert (Ts = []) as ->.
-    {
-      inversion H1;subst.
-      inversion H0;subst.
-      simpl in *.
-      inversion H4;subst.
-      done.
-    }
-    simpl in H3.
-    pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
-    inversion i.
-Qed.
 
 
 
@@ -745,6 +675,133 @@ Admitted.
 
 
 (*
+canonical values (see one from above for Idx)
+(specific type, rest generic, and is value expression)
+
+e : Idx #n 
+e : Idx en
+e : Array x en T
+e : Sigma Ts
+e : Pi x T U
+e : Nat
+*)
+
+Lemma canonical_kind xs s:
+  kind_dominance xs s →
+  sort s.
+Proof.
+  intros H.
+  induction H;auto;firstorder.
+Qed.
+
+
+(* is it sufficient to have n fixed as a nat or do we want more generally ⊢ en : Nat *)
+Lemma canonical_value_idx Γ e (n:nat):
+  TY Γ ⊢ e : Idx (LitNat n) ->
+  is_val e ->
+  exists i, e = LitIdx n i.
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst.
+  (* all general cases that are contradictory *)
+  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
+  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
+  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
+  - inversion H;congruence. (* Array named *)
+  - inversion H;congruence. (* Array anon *)
+Qed.
+
+(*
+  We take a look at a (possibly) interesting example to get a feeling for the type system
+  There is no invalid extract.
+  Especially, we never can extract from an empty tuple
+*)
+Example untyped_empty_extract:
+    (* we might as well assume ei is a value
+      (by soundess, we can evaluate to a value)
+    *)
+  ~ (exists Γ ei T, 
+      (* Simplifying assumption (see above) *)
+      is_val ei /\
+      (* TODO: is it valid to assume that T is also a value? *)
+      (* is_val T /\ *)
+      TY Γ ⊢ (Extract (Tuple []) ei) : T).
+Proof.
+  intros (Γ&ei&T&(Hv&Hty)).
+  inversion Hty;subst.
+  - (* array extract *)
+    (* we have Tuple [] : Array x en T0 *)
+    (* => the nat literal en is a nat 0 *)
+    inversion H2;subst;clear H2.
+    inversion H0;subst;clear H0.
+    simpl in H3.
+    congruence. (* TODO: this currently just works because normalization is not implemented *)
+  - (* sigma tuple extract *)
+    (*
+      proof idea:
+      ei is a Idx 0
+      because length Ts = 0 where Ts is the sigma type
+    *)
+    clear Hty.
+    assert (Ts = []) as ->.
+    {
+      inversion H1;subst.
+      inversion H0;subst.
+      simpl in *.
+      inversion H4;subst.
+      done.
+    }
+    simpl in H3.
+    pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
+    inversion i.
+Qed.
+
+Lemma canonical_value_pi Γ e x T U:
+  TY Γ ⊢ e : Pi x T U →
+  is_val e ->
+  
+  (e = Idx ∧ x = BAnon /\ T = Nat ∧ U = Star) ∨
+  exists f ef, 
+    (e = Lam x T f U ef ∧ is_val T).
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst.
+  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
+  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
+  - (* lambda named *)
+    right. eauto.
+  - (* lambda anon *)
+    right. eauto.
+  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
+  - inversion H;congruence. (* Array named *)
+  - inversion H;congruence. (* Array anon *)
+Qed.
+
+Lemma canonical_value_nat Γ e:
+  TY Γ ⊢ e : Nat →
+  is_val e ->
+  
+  exists n, e = LitNat n.
+Proof.
+  intros Hty Hv.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst.
+  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
+  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
+  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
+  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
+  - inversion H;congruence. (* Array named *)
+  - inversion H;congruence. (* Array anon *)
+Qed.
+
+
+
+
+(*
 Progress 
 |- e : A
 =================
@@ -777,13 +834,22 @@ Proof.
       otherwise, use base step
       *)
       assert (is_val eT ∨ reducible eT) as [HvalT|HredT] by admit.
-      * right. 
-        (* e: Pi x T U /\ is_val e => canonical form *)
-        assert (exists f eb, e = Lam x T f U eb) as (f&eb&->) by admit.
-        eexists. eapply base_contextual_step.
-        eapply BetaS. 3: reflexivity. 
-        1: admit. (* the type of Pi is a value => either not requirement for base step or A should be a value *)
-        assumption.
+      * specialize (canonical_value_pi _ _ _ _ _ H H1) as [(->&->&->&->)|(f&ef&(->&HvT))].
+        -- (* canonical value Idx *)
+          left.
+          (* from type_assignable, we get
+            eT: Nat
+            from there and canonical value, eT = LitNat n
+            hence, IdxAppV applies
+          *)
+          inversion H0;subst.
+          specialize (canonical_value_nat _ _ H2 HvalT) as [n ->].
+          now constructor.
+        -- right. 
+          (* e: Pi x T U /\ is_val e => canonical form *)
+          eexists. eapply base_contextual_step.
+          eapply BetaS. 3: reflexivity. 
+          all: eassumption.
       * right. destruct HredT. eexists. eauto. 
     + right. destruct H1. eexists. eauto. 
   - (* sigma cons *)
@@ -853,17 +919,6 @@ Admitted.
 
 
 (*
-canonical values (see one from above for Idx)
-(specific type, rest generic, and is value expression)
-
-
-Progress 
-|- e : A
-=================
-e is a value or
-exists e' s.t. e -> e'
-
-
 (some subst lemmas and context lemmas)
 
 Preservation over base step (Subject reduction)
