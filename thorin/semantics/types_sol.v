@@ -694,6 +694,54 @@ Proof.
   induction H;auto;firstorder.
 Qed.
 
+(* all general cases that are contradictory 
+  manually identified while proving the canonical value idx lemma
+*)
+Ltac no_nonsense_canonical := 
+  first 
+  [
+    (*
+      Look for assumption sort (...) where the inner is not Star or Box
+      try to apply inversion;congruence
+
+      Array named/anon
+    *)
+    match goal with
+    | H: sort ?s |- _ => try (inversion H;congruence)
+    end
+  |
+    (*
+      Look for assumption kind_dominance xs s where s is not Star, Box or a variable
+      apply canonical_kind;congruence
+
+      Pi named/anon, Sigma named/anon
+    *)
+    match goal with
+    | H: kind_dominance ?xs ?s |- _ => try (apply canonical_kind in H as [];congruence)
+    end
+  |
+    (* 
+    find an illegal Idx expression as function value
+    e.g.
+    H0: TY Γ ⊢ Idx : Pi x T U
+    H: subst' x #n U = X
+    where X is not star
+    => we need to find two assumptions that contradict
+
+    Idx #n as value via App case
+    *)
+      (* idtac "found1"; *)
+    match goal with
+    | H0: (TY ?Γ ⊢ Idx : Pi ?x ?T ?U),
+      H: (subst' ?x ?e ?U = ?X)
+      |- _ => 
+      (* idtac "found" *)
+      try (inversion H0;subst;simpl in H;congruence)
+    end
+  ].
+
+
+
 
 (* is it sufficient to have n fixed as a nat or do we want more generally ⊢ en : Nat *)
 Lemma canonical_value_idx Γ e (n:nat):
@@ -702,15 +750,7 @@ Lemma canonical_value_idx Γ e (n:nat):
   exists i, e = LitIdx n i.
 Proof.
   intros Hty Hv.
-  inversion Hty;subst;try naive_solver;inversion Hv;subst.
-  (* all general cases that are contradictory *)
-  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
-  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
-  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
-  - inversion H;congruence. (* Array named *)
-  - inversion H;congruence. (* Array anon *)
+  inversion Hty;subst;try naive_solver;inversion Hv;subst;no_nonsense_canonical.
 Qed.
 
 (*
@@ -767,18 +807,11 @@ Lemma canonical_value_pi Γ e x T U:
     (e = Lam x T f U ef ∧ is_val T).
 Proof.
   intros Hty Hv.
-  inversion Hty;subst;try naive_solver;inversion Hv;subst.
-  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
-  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
+  inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
   - (* lambda named *)
     right. eauto.
   - (* lambda anon *)
     right. eauto.
-  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
-  - inversion H;congruence. (* Array named *)
-  - inversion H;congruence. (* Array anon *)
 Qed.
 
 Lemma canonical_value_nat Γ e:
@@ -788,14 +821,7 @@ Lemma canonical_value_nat Γ e:
   exists n, e = LitNat n.
 Proof.
   intros Hty Hv.
-  inversion Hty;subst;try naive_solver;inversion Hv;subst.
-  - apply canonical_kind in H1 as [];congruence. (* Pi named *)
-  - apply canonical_kind in H1 as [];congruence. (* Pi anon *)
-  - inversion H0;subst. simpl in H. congruence. (* Idx #n as value via App case *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma named *)
-  - apply canonical_kind in H1 as [];congruence. (* Sigma anon *)
-  - inversion H;congruence. (* Array named *)
-  - inversion H;congruence. (* Array anon *)
+  inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
 Qed.
 
 
