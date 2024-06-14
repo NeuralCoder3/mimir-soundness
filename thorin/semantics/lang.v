@@ -388,11 +388,34 @@ Proof.
   by apply (fill_contextual_step (AppRCtx e1 HoleCtx H)).
 Qed.
 
+(* TODO: complete other lemmata about contextual steps *)
+
+Lemma contextual_step_extract_l e e' ei:
+  contextual_step e e' →
+  contextual_step (Extract e ei) (Extract e' ei).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (ExtractLCtx HoleCtx ei)).
+Qed.
+
+Lemma contextual_step_extract_r e ei ei':
+  is_val e →
+  contextual_step ei ei' →
+  contextual_step (Extract e ei) (Extract e ei').
+Proof.
+  intros H Hcontextual.
+  by apply (fill_contextual_step (ExtractRCtx e HoleCtx H)).
+Qed.
+
 #[export]
 Hint Resolve
   contextual_step_lam
   contextual_step_app_l
   contextual_step_app_r
+  (* ... *)
+  contextual_step_extract_l
+  contextual_step_extract_r
   : core.
 
-(* TODO: complete other lemmata about contextual steps *)
+
+

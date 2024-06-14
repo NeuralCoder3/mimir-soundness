@@ -788,11 +788,66 @@ Proof.
     + right. destruct H1. eexists. eauto. 
   - (* sigma cons *)
     destruct IHsyn_typed1.
-    + destruct IHsyn_typed2.
-      * left. now constructor.
-      * right. destruct H3. eexists. eauto. admit. (* contextual step lemma *)
+    + (* we only perform head reduction at sigma => rest not relevant *)
+      left. now constructor.
     + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
-Abort.
+  - (* sigma anon cons -- identical to sigma cons *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+  - (* tuple *)
+    admit. (* missing nested induction *)
+  - (* array *)
+    destruct IHsyn_typed1.
+    + (* T is not reduced as it (might) depend on x *)
+      left. now constructor.
+    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+  - (* array anon -- identical to array *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+  - (* pack *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+  - (* pack anon -- identical to pack *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+  - (* extract array *)
+    destruct IHsyn_typed1.
+    + destruct IHsyn_typed2.
+      * right.
+        eexists.
+        apply base_contextual_step.
+        (* 
+        TODO: this case will change with normalization
+        a tuple as well a pack could have array type
+        *)
+        (*
+        TODO: needs canonical value lemma about e : Array x en T
+        we want Pack x #n e
+
+        TODO: also a generalized idx lemma for Idx en (might need a value restriction for en)
+        *)
+        (* eapply IotaPackS. *)
+      admit. (* base step Iota reduction *)
+      * right. destruct H2. eexists. eauto. 
+    + right. destruct H1. eexists. eauto. 
+  - (* extract tuple (sigma type) *)
+    subst;simpl.
+    destruct IHsyn_typed1.
+    + destruct IHsyn_typed2.
+      * right.
+        pose proof (canonical_value_idx _ _ _ H1 H2) as [i ->].
+        eexists.
+        apply base_contextual_step.
+        (* IotaTupleS -- we know that e has to be a tuple as a pack will always have array type *)
+        (* TODO: needs canonical value lemma *)
+        admit. (* base step Iota reduction *)
+      * right. destruct H2. eexists. eauto. 
+    + right. destruct H0. eexists. eauto.
+Admitted.
 
 
 
