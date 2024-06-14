@@ -405,8 +405,16 @@ Admitted.
 (** Typing inversion lemmas 
 what do we know from expression is typed
 (expression specific everything else generic)
+
+usually, we want those lemmas 
+e.g. for substitution
+however, we need dependent induction as we need inductive knowledge about 
+the type derivations for types => any expression induction is insufficient
+=> we derive these inversion lemmas on the fly
 *)
-Lemma var_inversion Γ (x: string) A: TY Γ ⊢ x : A → 
+
+
+(* Lemma var_inversion Γ (x: string) A: TY Γ ⊢ x : A → 
   exists sA, Γ !! x = Some A ∧ TY Γ ⊢ A : sA.
 Proof. inversion 1; subst; eauto. Qed.
 
@@ -447,9 +455,8 @@ Lemma app_inversion Γ e eT B':
   B' = (subst' x eT U) ∧
   TY Γ ⊢ e : (Pi x T U) ∧
   type_assignable Γ T eT.
-Proof. inversion 1; subst; eauto 10. Qed.
+Proof. inversion 1; subst; eauto 10. Qed. *)
 
-(* TODO: ... *)
 
 
 
@@ -539,29 +546,16 @@ Lemma typed_substitutivity e e' Γ (a: string) A B :
   however, a should not clash with a binder (why?) as it ruins the induction hypothesis
   *)
 Proof.
-  intros He'. 
-  induction e in B, Γ, He' |-*; intros He; simpl.
-  all: try (by (inversion He; subst; eauto)).
-  - (* var *)
-    apply var_inversion in He. 
-    destruct (decide (x = a)); subst.
-    + rewrite lookup_insert in He. admit. (* holds under subst A = A *)
-    + rewrite lookup_insert_ne in He; eauto.
-      destruct He as [sB [Hlookup HtyA]].
-      econstructor.
-      (* TODO: here, subst B : ... is missing => needs hypothesis 
-      => induction e + inversion lemmas alone are not enough due to dependencies
-      *)
-
-
-
-  Restart.
     (*
     TODO: need A is closed under Γ by closed typing => subst does nothing
     same for Gamma (maybe as assumption)
     *)
   assert (lang.subst a e' A = A) as HsubstA by admit.
   intros He' H.
+  (* 
+  induction e + inversion lemmas alone are not enough due to dependencies
+  subst B : ... is missing => needs hypothesis 
+  *)
   dependent induction H;simpl;eauto.
   (* 
   TODO: we should probably use the inversion lemmas instead
@@ -685,40 +679,6 @@ Proof.
     admit. (* TODO: fold subst keeps length *)
 Admitted.
 
-Restart. (* old attempt without dependent subst in type *)
-  intros He'. 
-  (* induction e in x, A, e', B, Γ, He' |-*; intros He; simpl. *)
-  induction e in B, Γ, He' |-*; intros He; simpl.
-  (* star, box, bot, nat, idx *)
-  (* reversed weakening => additional assumptions not needed if closed 
-  for cases without var *)
-  all: try (by (inversion He; subst; eauto)).
-  - apply var_inversion in He. 
-    destruct (decide (x0 = x)); subst.
-    + rewrite lookup_insert in He. inversion He; subst. eauto.
-    + rewrite lookup_insert_ne in He; eauto.
-  - (* pi *)
-    destruct x0. 
-    + (* pi anon *)
-      apply pi_anon_inversion in He. destruct He as (sT & sU & H1 & H2 & H3).
-      econstructor; eauto.
-    + (* pi named *)
-      apply pi_inversion in He. destruct He as (sT & sU & H1 & H2 & H3).
-      econstructor.
-      3: eassumption.
-      * eapply IHe1; eauto.
-      * destruct decide.
-        -- admit. (* TODO: look at this *)
-        -- apply IHe2; admit.
-  - (* lam *)
-    destruct x0;simpl.
-    + (* lam anon *)
-      apply lam_anon_inversion in He. destruct He as (sT & sU & H1 & H2 & H3 & H4 & H5).
-      subst. 
-      eapply typed_lam_anon; eauto.
-      econstructor.
-      econstructor; eauto.
-      admit. (* TODO: needs assignable induction *)
 
 
 
