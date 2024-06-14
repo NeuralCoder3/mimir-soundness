@@ -211,11 +211,15 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ Sigma xs : s' →
       kind_dominance [s; s'] s'' →
       TY Γ ⊢ (Sigma ((BAnon, T)::xs)) : s''
-    | types_tuple Γ es Ts:
+    | typed_tuple Γ es Ts T:
       Forall2 (syn_typed Γ) es Ts →
       (* TODO: normalize to T, 
-      TODO: how to handle [bool, fun x -> if x then 1 else 0] : [T:*, T -> Nat] *)
-      TY Γ ⊢ (Tuple es) : (Sigma (map (fun T => (BAnon, T)) Ts))
+      TODO: how to handle [bool, fun x -> if x then 1 else 0] : [T:*, T -> Nat] 
+      
+      alternative: name each fresh, typed under previous names
+      *)
+      T = Sigma (map (fun T => (BAnon, T)) Ts) ->
+      TY Γ ⊢ (Tuple es) : T
     | typed_arr Γ x en T s:
       (* TODO: mistake in pdf (s vs s') *)
       TY Γ ⊢ en : Nat →
@@ -269,6 +273,37 @@ where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
 .
 #[export] Hint Constructors syn_typed : core.
+
+(*
+Thoughts on tuple types:
+
+(bool, λ (x:bool) : Nat, if x then 1 else 0) : [Bool, Bool -> Nat]
+(bool, λ (x:bool) : Nat, if x then 1 else 0) : [T:*, Π x:T, Nat] (or [T:*, T -> Nat])
+(T, λ (x:T) : Nat, 42) : [T:*, Π x:T, Nat]
+
+
+
+
+  |- bool : * (via app, Idx, Nat)
+    x:bool |- Nat <- if x then 1 else 0
+  |- λ (x:bool) : Nat, if x then 1 else 0 : Π x:bool, Nat
+    T = [*, Π x:bool, Nat]
+  [*, Π x:bool, Nat] ▹ T
+|- (bool, λ (x:bool) : Nat, if x then 1 else 0) : T
+
+has type [*, Π x:bool, Nat]
+but we probably would want unifiable type [T:*, T -> Nat]
+
+assume we want to put this into a function expecting [T:*, T -> Nat]
+then our expression should be assignable via
+  |- bool: * 
+    |- λ (x:bool) : Nat, if x then 1 else 0 : Π x:bool, Nat
+  |- (T -> Nat).[bool/T] <- λ (x:bool) : Nat, if x then 1 else 0
+|- [T:*, T -> Nat] <- (bool, λ (x:bool) : Nat, if x then 1 else 0)
+
+so at application point, it works out
+
+*)
 
 
 (* Lemma untyped_empty_extract:
@@ -389,7 +424,7 @@ Proof.
     now apply insert_mono.
   - (* Tuple *)
     econstructor.
-    admit. (* needs nested induction for sigma *)
+    all: admit. (* needs nested induction for sigma *)
   - (* Array *)
     econstructor; eauto.
     apply IHsyn_typed2.
@@ -645,7 +680,15 @@ Proof.
     + eapply IHsyn_typed2;eauto.
     + apply kind_subst_invariant_apply;eassumption.
   - (* Tuple *)
-    admit. (* TODO: check typing rule, nested induction *)
+    apply typed_tuple with (Ts:=map (subst a e') Ts).
+    2: {
+      f_equal.
+      clear H.
+      induction Ts;simpl.
+      - reflexivity.
+      - f_equal. apply IHTs.
+    }
+    admit. (* TODO: needs nested induction *)
   - (* Array *)
     econstructor.
     + eapply IHsyn_typed1;eauto.
@@ -680,6 +723,72 @@ Proof.
 Admitted.
 
 
+Lemma contextual_step_unop x ef U e T T':
+  contextual_step T T' →
+  (* contextual_step (λ: (x : T) @ef : U, e) (λ: (x : T') @ef : U, e). *)
+  contextual_step (Lam x T ef U e) (Lam x T' ef U e).
+  Proof.
+    intros Hcontextual.
+    by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
+  Qed.
+
+#[export]
+Hint Resolve
+  contextual_step_unop
+  : core.
+
+
+(*
+Progress 
+|- e : A
+=================
+e is a value or
+exists e' s.t. e -> e'
+*)
+Lemma typed_progress Γ e A:
+  (* TY ∅ ⊢ e : A → *)
+  TY Γ ⊢ e : A →
+  (* TODO: do we need an is_val of A? *)
+  is_val e ∨ reducible e.
+Proof.
+  intros H.
+  (* remember ∅ as Γ. *)
+  dependent induction H;eauto using is_val.
+  - admit.
+  - (* lambda *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + destruct H3. right. eexists. eauto. (* uses contextual step lemmas *)
+  - (* lambda anon -- same as named *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + destruct H3. right. eexists. eauto. 
+  - (* app *)
+    destruct IHsyn_typed.
+    + (* TODO: need assignable induction *)
+      (* idea would be:
+      either eT is not a value => do contextual step
+      otherwise, use base step
+      *)
+      assert (is_val eT ∨ reducible eT) as [HvalT|HredT] by admit.
+      * right. 
+        (* e: Pi x T U /\ is_val e => canonical form *)
+        assert (exists f eb, e = Lam x T f U eb) as (f&eb&->) by admit.
+        eexists. eapply base_contextual_step.
+        eapply BetaS. 3: reflexivity. 
+        1: admit. (* the type of Pi is a value => either not requirement for base step or A should be a value *)
+        assumption.
+      * right. destruct HredT. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+  - (* sigma cons *)
+    destruct IHsyn_typed1.
+    + destruct IHsyn_typed2.
+      * left. now constructor.
+      * right. destruct H3. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+
+
+
 
 
 (*
@@ -687,7 +796,7 @@ canonical values
 (specific type, rest generic, and is value expression)
 
 
-Progress (Subject reduction)
+Progress 
 |- e : A
 =================
 e is a value or
@@ -696,8 +805,10 @@ exists e' s.t. e -> e'
 
 (some subst lemmas and context lemmas)
 
-Preservation over base step
+Preservation over base step (Subject reduction)
 Preservation over context step (corollary)
+
+possibly allow reduction in type context
 
 Together type safety (corollary)
 *)

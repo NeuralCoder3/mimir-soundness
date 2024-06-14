@@ -206,11 +206,14 @@ Qed.
   We use additional is_val to restrict the contexts
 
   only relevant for two sided reductions in app, extract, and tuple
+
+  Note: we are a bit lazier => do not evaluate under binders
 *)
 Inductive ectx :=
   | HoleCtx
   (* only context in T as U might depend on x:T *)
   | PiCtx (x:binder) (K: ectx) (U:expr) 
+  (* the filter depends on the argument *)
   | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr)
   | AppLCtx (K: ectx) (v2 : expr)
   | AppRCtx (e1 : expr) (K: ectx) (H: is_val e1)
