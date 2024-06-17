@@ -363,13 +363,21 @@ we need these lemmas for progress
 however, the context is an indirection over a simplification requiring a lemma to ease the automation burdon
 *)
 
+Lemma contextual_step_pi x T U T':
+  contextual_step T T' →
+  contextual_step (Pi x T U) (Pi x T' U).
+Proof.
+  intros Hcontextual.
+  by eapply (fill_contextual_step (PiCtx x HoleCtx U)).
+Qed.
+
 Lemma contextual_step_lam x ef U e T T':
   contextual_step T T' →
   contextual_step (Lam x T ef U e) (Lam x T' ef U e).
-  Proof.
-    intros Hcontextual.
-    by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
-  Qed.
+Proof.
+  intros Hcontextual.
+  by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
+Qed.
 
 Lemma contextual_step_app_l e1 e1' e2:
   contextual_step e1 e1' →

@@ -995,6 +995,246 @@ Admitted.
 
 
 
+Lemma Forall2_nth_error {X Y:Type} (P: X -> Y -> Prop) xs ys:
+  Forall2 P xs ys →
+  (* ∀ i x y, xs !! i = Some x → ys !! i = Some y → P x y. *)
+  forall i x,
+  (* xs !! i = Some x →
+  exists y, ys !! i = Some y ∧ P x y. *)
+  nth_error xs i = Some x →
+  exists y, nth_error ys i = Some y ∧ P x y.
+Proof.
+  intros H i x Hx.
+  induction H in i,Hx |-*;destruct i;simpl in *;try congruence.
+  - inversion Hx;subst.
+    exists y;split;eauto.
+  - clear x0 y H.
+    specialize (IHForall2 i Hx) as [y [Hy HP]].
+    exists y;split;eauto.
+Qed.
+Arguments Forall2_nth_error {_ _ _ _ _}.
+
+(* Lemma typed_preservation_base_step e e' A:
+  TY 0; ∅ ⊢ e : A →
+  base_step e e' →
+  TY 0; ∅ ⊢ e' : A.
+Proof. *)
+
+Lemma typed_preservation_base_step e e' A:
+  TY ∅ ⊢ e : A →
+  base_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+  intros Hty Hstep.
+  inversion Hstep;subst.
+  (* beta and 2 iota *)
+  all: inversion Hty;subst;eauto using is_val.
+  - (* beta *)
+    (* unify lambda name and pi name *)
+    inversion H4;subst.
+    + (* named *)
+      (* replace (∅) with (subst x1 earg <$> ∅). *)
+      simpl.
+      (* TODO: need full TY ... due to fmap value type parameter => use lemma *)
+      replace (TY ∅ ⊢ subst x1 earg elam : subst x1 earg U0)
+      with (TY subst x1 earg <$> ∅ ⊢ subst x1 earg elam : subst x1 earg U0) by now rewrite fmap_empty.
+      eapply typed_substitutivity.
+      * admit. (* TODO: needs assignable induction *)
+      * admit. (* TODO: needs assignable induction *)
+    + (* anon *)  
+      simpl in *. (* remove all subst *)
+      admit. (* TODO: needs assignable induction *)
+  - (* Iota Tuple *)
+    (* Tuple: Array *)
+    inversion H4;subst.
+    inversion H5.
+    (* TODO: this rule coincides conceptually with the one below if normalization is added *)
+  - (* Iota Tuple *)
+    (* Tuple: Sigma *)
+    (* TODO: this case changes with changes in the typed_extract_tuple rule *)
+    (* TODO: normalization needed here (Extract of T is not enough for U, we need the concrete T) *)
+    inversion H3;subst.
+    specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T [HnthT HT]].
+    admit. (* TODO: need normalization *)
+    (* remember i as t. (* not sure if necessary, avoid that an i1 is introduced *)
+    rewrite Heqt in H5.
+    inversion H5;subst.  *)
+    (* pose proof H2 as Hlen. *)
+    (* apply Forall2_length in Hlen.
+    (* inversion H5;subst. *)
+    assert (exists T, 
+      nth_error Ts0 (` (Fin.to_nat i)) = Some T
+    ) as [T HT] by admit. (* we need i : fin(length Ts0)  instead length es (by H10 and H6) *)
+    assert (
+      TY ∅ ⊢ e' : T
+    ).
+    {
+      (* by H2 *)
+      Search Forall2.
+    } *)
+
+
+    (* assert (exists T, 
+      nth_error Ts0 (` (Fin.to_nat i)) = Some T
+    ).
+    {
+      clear Hstep Hty H1 H5.
+      rewrite H10 in i.
+      apply nth_fin.
+
+    } *)
+    (* inversion H6;subst;clear H6. *)
+  - (* Iota Pack *)
+    (* Pack: Array *)
+    inversion H3;subst.
+    + (* named *)
+      simpl in *.
+      replace (TY ∅ ⊢ subst x1 ei e0 : subst x1 ei T)
+        with (TY subst x1 ei <$> ∅ ⊢ subst x1 ei e0 : subst x1 ei T) by now rewrite fmap_empty.
+      eapply typed_substitutivity;eassumption.
+    + (* anon *)
+      simpl in *.
+      assumption.
+  - (* Iota Pack *)
+    (* Pack: Sigma *)
+    (* not possible *)
+    inversion H2.
+Admitted.
+
+
+Definition ectx_typing (K: ectx) A B :=
+  ∀ e, TY ∅ ⊢ e : A → TY ∅ ⊢ (fill K e) : B.
+
+
+Lemma fill_typing_decompose K e A:
+  TY ∅ ⊢ fill K e : A →
+  ∃ B, TY ∅ ⊢ e : B ∧ ectx_typing K B A.
+  (* TODO: the fill in of ectx_typing should not just will in e but also in the type A
+  e.g. the type of a lambda is the hole => it is also a hole in the type
+
+  TODO: do we need typing contexts for this? 
+  
+  
+  ∅ ⊢ λ (x:𝐍), x+2 : Π (x:𝐍), 𝐍
+            ^ e 
+  -> ∃ B = *,
+  ∅ ⊢ e : *
+  but not
+  ∀ e',
+  ∅ ⊢ e' : *
+  ∅ ⊢ λ (x:e'), x+2 : Π (x:𝐍), 𝐍
+
+  even more strict:
+  the expression is not even typed for all e'
+
+  TODO: this lemma does not hold
+  even the generalization with type contexts does not hold
+    (we can not change the type of a lambda independent of the body)
+  *)
+Proof.
+  unfold ectx_typing.
+  intros HTy.
+  dependent induction HTy.
+  all: revert x; dependent inversion K;subst;simpl;try congruence;intros X;subst.
+  all: eauto 10.
+  - (* pi named *)
+    inversion X. edestruct IHHTy1 as (? & ? & ?);eauto.
+    eexists;split;[eassumption|].
+    intros.
+    econstructor.
+    all: try eassumption.
+    + now apply H4.
+    + admit. (* TODO: need Gamma *)
+  - (* pi anon *)
+    inversion X. edestruct IHHTy1 as (? & ? & ?);eauto.
+    eexists;split;[eassumption|].
+    subst. intros.
+    econstructor.
+    all: try eassumption.
+    now apply H4.
+  - inversion X.
+    edestruct IHHTy1 as (? & ? & ?);eauto.
+    eexists;split;[eassumption|].
+    intros.
+    subst.
+    eapply typed_lam.
+    econstructor.
+    all: try eassumption.
+    + now apply H4.
+    + admit. (* TODO: need Gamma *)
+
+  (* idea: we never go under binder in reduction => no gamma enough *)
+
+
+  
+  - revert x; dependent inversion K;subst;simpl;try congruence.
+  dependent induction HTy; dependent inversion K;try congruence.
+
+
+  (* TODO: hypothesis: the induction is too weak/the context replacement has dependencies on type level *)
+  unfold ectx_typing; induction K in A |-*; simpl; inversion 1; subst; eauto.
+  all: edestruct IHK as (? & ? & ?); eauto 10.
+  - (* we already used IHK and should not need to use it again *)
+    exists x. split;[eassumption|].
+    intros.
+    econstructor.
+    + now apply H1.
+    + admit.
+    + eassumption.
+  - admit.
+  - eexists;split;[eassumption|].
+    intros.
+    eapply typed_lam_anon.
+
+
+
+
+
+
+  - exists x;split;[assumption|].
+    intros e' Hty.
+    econstructor;eauto.
+    specialize (IHK _ H4).
+    destruct IHK as [x' [Hex' Hctx]].
+    admit.
+  - 
+
+    
+  (* - eexists;split;eauto.  intros e' Hty.
+    eapply typed_preservation_base_step;eauto. *)
+Admitted.
+  (* unfold ectx_typing; induction K in A |-*; simpl; inversion 1; subst; eauto.
+  all: edestruct IHK as (? & ? & ?); eauto.
+Qed. *)
+
+Lemma fill_typing_compose K e A B:
+  TY ∅ ⊢ e : B →
+  ectx_typing K B A →
+  TY ∅ ⊢ fill K e : A.
+Proof.
+  intros H1 H2; by eapply H2.
+Qed.
+
+
+Lemma typed_preservation e e' A:
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+  eapply fill_typing_decompose in Hty as [B [H1 H2]].
+  eapply fill_typing_compose; last done.
+  by eapply typed_preservation_base_step.
+Qed.
+
+Lemma typed_safety e1 e2 A:
+  TY ∅ ⊢ e1 : A →
+  rtc contextual_step e1 e2 →
+  is_val e2 ∨ reducible e2.
+Proof.
+  induction 2; eauto using typed_progress, typed_preservation.
+Qed.
+
 
 (*
 (some subst lemmas and context lemmas)
