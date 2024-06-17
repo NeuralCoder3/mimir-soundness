@@ -1106,7 +1106,7 @@ Definition ectx_typing (K: ectx) A B :=
   ∀ e, TY ∅ ⊢ e : A → TY ∅ ⊢ (fill K e) : B.
 
 
-Lemma fill_typing_decompose K e A:
+(* Lemma fill_typing_decompose K e A:
   TY ∅ ⊢ fill K e : A →
   ∃ B, TY ∅ ⊢ e : B ∧ ectx_typing K B A.
   (* TODO: the fill in of ectx_typing should not just will in e but also in the type A
@@ -1202,7 +1202,7 @@ Proof.
     
   (* - eexists;split;eauto.  intros e' Hty.
     eapply typed_preservation_base_step;eauto. *)
-Admitted.
+Admitted. *)
   (* unfold ectx_typing; induction K in A |-*; simpl; inversion 1; subst; eauto.
   all: edestruct IHK as (? & ? & ?); eauto.
 Qed. *)
@@ -1215,7 +1215,26 @@ Proof.
   intros H1 H2; by eapply H2.
 Qed.
 
+(*
+∅ ⊢ e : A 
+e → e'
+===========
+∅ ⊢ e' : A  
 
+
+
+TODO: is this correct?
+  λ (x: Idx (1+1)) : 𝐍, if x then 1 else 0 
+    : Π (x: Idx (1+1)), 𝐍
+  does base step in context
+    LamCtx x ... ... 𝐍 (if x then 1 else 0)
+  to
+  λ (x: Idx 2) : 𝐍, if x then 1 else 0 
+            ^
+    : Π (x: Idx 2), 𝐍
+  
+  so the type changes
+*)
 Lemma typed_preservation e e' A:
   TY ∅ ⊢ e : A →
   contextual_step e e' →
