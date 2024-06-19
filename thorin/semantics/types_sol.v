@@ -1215,6 +1215,35 @@ Proof.
   intros H1 H2; by eapply H2.
 Qed.
 
+(* TODO: we want is_val <-> ~ reducibile *)
+Lemma values_dont_reduce e:
+  is_val e → ¬ reducible e.
+Proof.
+  intros Hv Hred.
+  destruct Hred.
+  destruct H as [K e1 e2 -> -> Hred].
+  induction K;simpl in Hv;inversion Hv;subst;try congruence.
+  all: try (now inversion Hred).
+  - (* Idx #n, Idx -> ... *)
+    destruct K;simpl in *;inversion H0;subst.
+    inversion Hred.
+  - (* Idx #n, #n -> ... *)
+    destruct K;simpl in H2;inversion H2;subst.
+    inversion Hred.
+  - apply Forall_app in H1 as [H1 H2].
+    inversion H2;subst.
+    congruence.
+Qed.
+
+
+(*
+e1 -> e2
+
+subst x e1 e = e \/ exists e', subst x e1 e -> e' (e1 is not necessarily the left-most redex)
+
+*)
+
+
 (*
 ∅ ⊢ e : A 
 e → e'
@@ -1246,24 +1275,28 @@ TODO:
   why is this different to assume value e?
 *)
 Lemma typed_preservation e e' A:
-  (* is_val A → *)
+  is_val A →
   TY ∅ ⊢ e : A →
   contextual_step e e' →
   TY ∅ ⊢ e' : A.
 Proof.
-  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+  intros Hval Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
 
-  induction K in A, Hty |- *;simpl in *.
+  induction K in A, Hval, Hty |- *;simpl in *.
   1: eapply typed_preservation_base_step;eassumption.
   all: inversion Hty;subst.
   - (* pi named *)
     eapply typed_pi;try eassumption.
-    + apply IHK;eauto. (* is_val is easy *)
+    + apply IHK;eauto. admit. (* is_val is easy *)
     + admit. (* TODO: reduction step in context (strengthen the goal) *)
   - (* pi anon *)
     eapply typed_pi_anon;try eassumption.
-    apply IHK;eauto. (* is_val is easy *)
+    apply IHK;eauto. admit. (* is_val is easy *)
   - (* lambda named *)
+    exfalso.
+    eapply values_dont_reduce;eauto.
+    eexists. eapply Ectx_step with (K:=PiCtx x0 K U);eauto.
+    (*
     (* TODO: allow beta step(s) at type *)
     (* state later that is_val A implies that beta equiv terms are equal *)
     (* change Pi x0 (fill K e1) to (Pi x0 (fill K e2)) *)
@@ -1274,51 +1307,92 @@ Proof.
     + admit. (* TODO: reduction step in context (strengthen the goal) *)
     + admit. (* TODO: reduction step in context (strengthen the goal) *)
     + admit. (* TODO: assignable induction *)
+    *)
   - (* lambda anon *)
     enough (TY ∅ ⊢ (Lam BAnon (fill K e2) f U e) : Pi BAnon (fill K e2) U) by admit.
     eapply typed_lam_anon;eauto.
+    apply IHK.
+    2: eassumption.
+    admit. (* is val *)
     admit. (* TODO: assignable induction *)
   - (* app left context *)
     eapply typed_app.
-    + apply IHK;eauto.
-    + eassumption.
+    + apply IHK;eauto. admit. (* TODO: 
+      here, we need that the type of e1 (Pi x T U) is also a value for induction
+      however, we only know that U is a value
+      => we want inner types as values
+      normalization should also guarantee this however
+    *)
+    + assumption.
   - (* app right context *)
+    exfalso.
+    eapply values_dont_reduce. 1: apply Hval.
+    eexists. admit. (* TODO: reduction under subst *)
+    (*
     (* again apply reduction step in goal => replace e1 with e2 *)
     enough (TY ∅ ⊢ e0 (fill K e2) : subst' x (fill K e2) U) by admit.
     eapply typed_app.
     + eassumption.
     + admit. (* TODO: assignable induction *)
+    *)
   - (* sigma cons named *)
     eapply typed_sigma_cons;eauto.
-    admit. (* TODO: reduction in context *)
+    + apply IHK;eauto. admit. (* simple is val *)
+    + admit. (* TODO: reduction in context *)
   - (* sigma cons anon *)
     eapply typed_sigma_cons_anon;eauto.
+    apply IHK;eauto. admit. (* simple is val *)
   - (* tuple *)
     eapply typed_tuple;eauto.
-    admit. (* TODO: nested induction *)
+    apply list.Forall2_app_inv_l in H1 as (Ts1&Ts2&HTs1&HTs2&HTs).
+    apply list.Forall2_app_inv_l.
+    inversion HTs2;subst.
+    do 2 eexists;repeat split;eauto.
+    constructor;eauto.
+    apply IHK;eauto.
+    admit. (* inner is val of unreduced head type *)
   - (* array *)
     eapply typed_arr;eauto.
-    admit. (* TODO: reduction in context *)
+    + apply IHK;eauto. constructor.
+    + admit. (* TODO: reduction in context *)
   - (* array anon *)
     eapply typed_arr_anon;eauto.
+    apply IHK;eauto. constructor.
   - (* pack *)
+    exfalso.
+    eapply values_dont_reduce. 1: apply Hval.
+    eexists. eapply Ectx_step with (K:=ArrayCtx x0 K T);eauto.
+    (*
     (* reduction in type *)
     enough (TY ∅ ⊢ Pack x0 (fill K e2) e : Array x0 (fill K e2) T) by admit.  
     eapply typed_pack;eauto.
     admit. (* TODO: reduction in context *)
+    *)
   - (* pack anon *)
-    enough (TY ∅ ⊢ Pack BAnon (fill K e2) e : Array BAnon (fill K e2) T) by admit.  
-    eapply typed_pack_anon;eauto.
+    exfalso.
+    eapply values_dont_reduce. 1: apply Hval.
+    eexists. eapply Ectx_step with (K:=ArrayCtx BAnon K T);eauto.
+    (* enough (TY ∅ ⊢ Pack BAnon (fill K e2) e : Array BAnon (fill K e2) T) by admit.  
+    eapply typed_pack_anon;eauto. *)
   - (* extract array left *)
     eapply typed_extract_array;eauto.
+    apply IHK;eauto. constructor. admit. (* array is value *)
   - (* extract sigma left *)
+    inversion Hval.
+    (*
     eapply typed_extract_tuple;eauto.
+    apply IHK;eauto. admit. (* sigma is value *)
+    *) 
   - (* extract array right *)
-    replace (fill K e1) with (fill K e2) by admit.
-    eapply typed_extract_array;eauto.
+    exfalso.
+    eapply values_dont_reduce. 1: apply Hval.
+    eexists. admit. (* TODO: reduction under subst *)
+    (* replace (fill K e1) with (fill K e2) by admit.
+    eapply typed_extract_array;eauto. *)
   - (* extract sigma right *)
-    replace (fill K e1) with (fill K e2) by admit.
-    eapply typed_extract_tuple;eauto.
+    inversion Hval.
+    (* replace (fill K e1) with (fill K e2) by admit.
+    eapply typed_extract_tuple;eauto. *)
 
 
 

@@ -65,7 +65,9 @@ Inductive is_val : expr → Prop :=
   | IdxAppV n : is_val (App Idx (LitNat n))
   | LitNatV n : is_val (LitNat n)
   | LitIdxV n i : is_val (LitIdx n i)
-  | PiV x T U : is_val (Pi x T U)
+  | PiV x T U : 
+    is_val T →
+    is_val (Pi x T U)
   | LamV x T f U e : 
     is_val T →
     (* U might depend on x:T *)
