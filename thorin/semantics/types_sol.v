@@ -1246,12 +1246,83 @@ TODO:
   why is this different to assume value e?
 *)
 Lemma typed_preservation e e' A:
-  is_val A →
+  (* is_val A → *)
   TY ∅ ⊢ e : A →
   contextual_step e e' →
   TY ∅ ⊢ e' : A.
 Proof.
-  intros Hval Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  induction K in A, Hty |- *;simpl in *.
+  1: eapply typed_preservation_base_step;eassumption.
+  all: inversion Hty;subst.
+  - (* pi named *)
+    eapply typed_pi;try eassumption.
+    + apply IHK;eauto. (* is_val is easy *)
+    + admit. (* TODO: reduction step in context (strengthen the goal) *)
+  - (* pi anon *)
+    eapply typed_pi_anon;try eassumption.
+    apply IHK;eauto. (* is_val is easy *)
+  - (* lambda named *)
+    (* TODO: allow beta step(s) at type *)
+    (* state later that is_val A implies that beta equiv terms are equal *)
+    (* change Pi x0 (fill K e1) to (Pi x0 (fill K e2)) *)
+    (* enough (TY ∅ ⊢ (λ: (x0 : fill K e2) @f : U, e) : Pi x0 (fill K e2) U) by admit. *)
+    enough (TY ∅ ⊢ (Lam x0 (fill K e2) f U e) : Pi x0 (fill K e2) U) by admit.
+    eapply typed_lam.
+    + apply IHK;eassumption.
+    + admit. (* TODO: reduction step in context (strengthen the goal) *)
+    + admit. (* TODO: reduction step in context (strengthen the goal) *)
+    + admit. (* TODO: assignable induction *)
+  - (* lambda anon *)
+    enough (TY ∅ ⊢ (Lam BAnon (fill K e2) f U e) : Pi BAnon (fill K e2) U) by admit.
+    eapply typed_lam_anon;eauto.
+    admit. (* TODO: assignable induction *)
+  - (* app left context *)
+    eapply typed_app.
+    + apply IHK;eauto.
+    + eassumption.
+  - (* app right context *)
+    (* again apply reduction step in goal => replace e1 with e2 *)
+    enough (TY ∅ ⊢ e0 (fill K e2) : subst' x (fill K e2) U) by admit.
+    eapply typed_app.
+    + eassumption.
+    + admit. (* TODO: assignable induction *)
+  - (* sigma cons named *)
+    eapply typed_sigma_cons;eauto.
+    admit. (* TODO: reduction in context *)
+  - (* sigma cons anon *)
+    eapply typed_sigma_cons_anon;eauto.
+  - (* tuple *)
+    eapply typed_tuple;eauto.
+    admit. (* TODO: nested induction *)
+  - (* array *)
+    eapply typed_arr;eauto.
+    admit. (* TODO: reduction in context *)
+  - (* array anon *)
+    eapply typed_arr_anon;eauto.
+  - (* pack *)
+    (* reduction in type *)
+    enough (TY ∅ ⊢ Pack x0 (fill K e2) e : Array x0 (fill K e2) T) by admit.  
+    eapply typed_pack;eauto.
+    admit. (* TODO: reduction in context *)
+  - (* pack anon *)
+    enough (TY ∅ ⊢ Pack BAnon (fill K e2) e : Array BAnon (fill K e2) T) by admit.  
+    eapply typed_pack_anon;eauto.
+  - (* extract array left *)
+    eapply typed_extract_array;eauto.
+  - (* extract sigma left *)
+    eapply typed_extract_tuple;eauto.
+  - (* extract array right *)
+    replace (fill K e1) with (fill K e2) by admit.
+    eapply typed_extract_array;eauto.
+  - (* extract sigma right *)
+    replace (fill K e1) with (fill K e2) by admit.
+    eapply typed_extract_tuple;eauto.
+
+
+
+
 
   (* revert e2 Hstep .
   dependent induction Hty;intros e2 Hstep;destruct K;simpl in *.
