@@ -1234,13 +1234,57 @@ TODO: is this correct?
     : Π (x: Idx 2), 𝐍
   
   so the type changes
-*)
+
 Lemma typed_preservation e e' A:
   TY ∅ ⊢ e : A →
   contextual_step e e' →
   TY ∅ ⊢ e' : A.
 Proof.
-  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+TODO: 
+  is assuming "value A" safe
+  why is this different to assume value e?
+*)
+Lemma typed_preservation e e' A:
+  is_val A →
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+  intros Hval Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  (* revert e2 Hstep .
+  dependent induction Hty;intros e2 Hstep;destruct K;simpl in *.
+  (* inversion K;subst;simpl in *;try congruence. *)
+  all: try congruence.
+  (* all: inversion Hstep;subst.
+  all: try congruence. *)
+  all: try now (inversion Hstep;subst;try congruence).
+  - inversion x;subst.
+  - inversion Hstep;subst;try congruence.
+  - inversion Hstep;subst;try congruence.
+  -  *)
+
+  (* induction K in e1,e2,Hstep,Hty |- *;simpl in *. *)
+  induction K in A, Hval, Hty |- *;simpl in *.
+  - admit.
+  - (* Pi *)
+    inversion Hty;subst.
+    + econstructor;eauto.
+      all: admit. (* e2 instead of e1 in context *)
+    + econstructor;eauto.
+      all: admit.
+    (* TODO: this reduction in type is impossible (is it?)
+      otherwise, we would have a reduction in the type
+
+      not true: the type is a kind (star/box) which is a value
+
+    *)
+  - 
+
+  inversion Hstep;subst.
+  - 
+
   eapply fill_typing_decompose in Hty as [B [H1 H2]].
   eapply fill_typing_compose; last done.
   by eapply typed_preservation_base_step.
