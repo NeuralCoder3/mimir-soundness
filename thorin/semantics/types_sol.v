@@ -1367,33 +1367,234 @@ TODO:
 *)
 
 
-Hypothesis (typed_beta:
+(* Hypothesis (typed_beta:
   ∀ Γ e A B,
   TY Γ ⊢ e : A →
   contextual_step B A →
   TY Γ ⊢ e : B
-).
+). *)
+(*
+copy of typing relation with additional beta rule
+*)
+Reserved Notation "'TY' Γ ⊢' e : A" (at level 74, e, A at next level).
+Reserved Notation "'TY' Γ ⊢' A ← e" (at level 74, e, A at next level).
+Inductive beta_syn_typed : typing_context → expr → expr → Prop :=
+   | beta_typed_star Γ: TY Γ ⊢' Star : Box
+   | beta_typed_bot Γ: TY Γ ⊢' Bot : Star
+   | beta_typed_nat Γ: TY Γ ⊢' Nat : Star
+   | beta_typed_idx Γ: TY Γ ⊢' Idx : (Pi BAnon Nat Star)
+   | beta_typed_lit_nat Γ n: TY Γ ⊢' (#n)%E : Nat
+   | beta_typed_lit_idx Γ n i: TY Γ ⊢' (LitIdx n i) : (App Idx n)
+   | beta_typed_var Γ x A sA: Γ !! x = Some A → TY Γ ⊢' A : sA → TY Γ ⊢' (Var x) : A
+   | beta_typed_pi Γ T sT x U sU s: TY Γ ⊢' T : sT → TY (<[x := T]> Γ) ⊢' U : sU → kind_dominance [sT; sU] s → TY Γ ⊢' (Pi (BNamed x) T U) : s
+   | beta_typed_pi_anon Γ T sT U sU s: TY Γ ⊢' T : sT → TY Γ ⊢' U : sU → kind_dominance [sT; sU] s → TY Γ ⊢' (Pi BAnon T U) : s
+   | beta_typed_lam Γ x T ef U e sT sU: TY Γ ⊢' T : sT → TY (<[x := T]> Γ) ⊢' U : sU → TY (<[x := T]> Γ) ⊢' ef : Bool → type_assignable (<[x := T]> Γ) U e → TY Γ ⊢' (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
+   | beta_typed_lam_anon Γ T ef U e sT sU: TY Γ ⊢' T : sT → TY Γ ⊢' U : sU → TY Γ ⊢' ef : Bool → type_assignable Γ T e → TY Γ ⊢' (Lam BAnon T ef U e) : (Pi BAnon T U)
+   | beta_typed_app Γ e eT x T U: TY Γ ⊢' e : (Pi x T U) → type_assignable Γ T eT → TY Γ ⊢' (App e eT) : (subst' x eT U)
+   | beta_typed_sigma_empty Γ: TY Γ ⊢' Sigma [] : Star
+   | beta_typed_sigma_cons Γ x T s xs s' s'': TY Γ ⊢' T : s → TY (<[x := T]> Γ) ⊢' Sigma xs : s' → kind_dominance [s; s'] s'' → TY Γ ⊢' (Sigma ((BNamed x, T)::xs)) : s''
+   | beta_typed_sigma_cons_anon Γ T s xs s' s'': TY Γ ⊢' T : s → TY Γ ⊢' Sigma xs : s' → kind_dominance [s; s'] s'' → TY Γ ⊢' (Sigma ((BAnon, T)::xs)) : s''
+   | beta_typed_tuple Γ es Ts T: Forall2 (syn_typed Γ) es Ts → T = Sigma (map (fun T => (BAnon, T)) Ts) -> TY Γ ⊢' (Tuple es) : T
+   | beta_typed_arr Γ x en T s: sort s → TY Γ ⊢' en : Nat → TY (<[x := App Idx en]> Γ) ⊢' T : s → TY Γ ⊢' (Array (BNamed x) en T) : s
+   | beta_typed_arr_anon Γ en T s: sort s → TY Γ ⊢' en : Nat → TY Γ ⊢' T : s → TY Γ ⊢' (Array BAnon en T) : s
+   | beta_typed_pack Γ x en e T: TY Γ ⊢' en : Nat → TY (<[x := App Idx en]> Γ) ⊢' e : T → TY Γ ⊢' (Pack (BNamed x) en e) : (Array (BNamed x) en T)
+   | beta_typed_pack_anon Γ en e T: TY Γ ⊢' en : Nat → TY Γ ⊢' e : T → TY Γ ⊢' (Pack BAnon en e) : (Array BAnon en T)
+   | beta_typed_extract_array Γ e ei en T x: TY Γ ⊢' e : (Array x en T) → TY Γ ⊢' ei : (App Idx en) → TY Γ ⊢' (Extract e ei) : (subst' x ei T)
+   | beta_typed_extract_tuple Γ e ei Ts Ts' T n s U: TY Γ ⊢' e : (Sigma Ts) → n = length Ts → TY Γ ⊢' ei : (App Idx n) → Ts' = Ts -> T = Sigma Ts' -> TY Γ ⊢' T : s -> U = Extract T ei -> TY Γ ⊢' (Extract e ei) : U
+   | beta_typed Γ A B e:
+      TY Γ ⊢' e : A →
+      contextual_step B A →
+      TY Γ ⊢' e : B
+   | beta_typed_rev Γ A B e:
+      TY Γ ⊢' e : A →
+      contextual_step A B →
+      TY Γ ⊢' e : B
+
+with beta_type_assignable : typing_context -> expr -> expr -> Prop :=
+  | beta_assignable_typed Γ e T:
+      TY Γ ⊢' e : T ->
+      beta_type_assignable Γ T e
+  | beta_assignable_sigma Γ Ts e:
+      beta_type_assignable Γ (Sigma Ts) e
+where "'TY' Γ ⊢' e : A" := (beta_syn_typed Γ e%E A%E).
+#[export] Hint Constructors beta_syn_typed : core.
+
+
+Lemma typed_beta_typed Γ e A:
+  TY Γ ⊢ e : A →
+  TY Γ ⊢' e : A.
+Proof.
+  induction 1;eauto.
+Qed.
+
+
+(* Lemma beta_typed_typed Γ e A:
+  TY ∅ ⊢' e : A →
+  normalized_type e →
+  TY ∅ ⊢ e : A.
+Proof.
+  intros H1 H2.
+  dependent induction H1;eauto.
+  - *)
+
+Lemma beta_typed_typed Γ e A:
+  TY Γ ⊢' e : A →
+  normalized_type e →
+  TY Γ ⊢ e : A.
+Proof.
+  intros H1 H2.
+  induction H1;eauto.
+  - (* var *)
+    econstructor;eauto. apply IHbeta_syn_typed.
+    admit.
+  - (* pi named *)
+    inversion H2;subst.
+    econstructor;eauto.
+    + apply IHbeta_syn_typed1. admit.
+    + apply IHbeta_syn_typed2. admit. (* TODO: does not hold: we recurse (necessarily) under binder with changed gamma *)
+  - (* pi anon *)
+    admit.
+  - (* lambda named *)
+    econstructor;eauto.
+    + apply IHbeta_syn_typed1. admit.
+    + apply IHbeta_syn_typed2. admit.
+    + apply IHbeta_syn_typed3. admit.
+  - (* lambda anon *)
+    admit.
+  - (* app *)
+    econstructor;eauto.
+    inversion H2;subst.
+    apply IHbeta_syn_typed. assumption.
+  - (* sigma *)
+Abort.
+
+
+Lemma typed_preservation_base_step_beta e e' A:
+  TY ∅ ⊢' e : A →
+  base_step e e' →
+  TY ∅ ⊢' e' : A.
+Admitted.
+
 
 Lemma typed_preservation e e' A:
-  TY ∅ ⊢ e : A →
+  TY ∅ ⊢' e : A →
   contextual_step e e' →
-  TY ∅ ⊢ e' : A.
+  TY ∅ ⊢' e' : A.
 Proof.
   intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
 
+  dependent induction Hty;eauto.
+  all: destruct K;simpl in *;try congruence;subst.
+  all: try now inversion Hstep.
+  all: try inversion x;subst.
+  - (* pi named *)
+    eapply beta_typed_pi;eauto.
+    admit. (* step in context *)
+  - (* pi anon *)
+    admit.
+  - (* lambda named *)
+    eapply beta_typed.
+    2: eapply Ectx_step with (K:=PiCtx x0 K U0);eauto.
+    simpl.
+    eapply beta_typed_lam;eauto.
+    + admit. (* step in context *)
+    + admit. (* step in context *)
+    + admit. (* step in context in assignable *)
+  - (* lambda anon *)
+    admit.
+  - (* hole context, toplevel reduction app *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eapply beta_typed_app;eauto.
+  - (* app left *)
+    eapply beta_typed_app;eauto.
+  - (* app right *)
+    eapply beta_typed.
+    2: admit. (* context under subst *)
+    eapply beta_typed_app;eauto. 
+    admit. (* assignable *)
+  - (* sigma cons *)
+    eapply beta_typed_sigma_cons;eauto.
+    admit. (* step in context *)
+  - (* sigma anon cons *)
+    admit.
+  - (* Tuple *)
+    eapply beta_typed_tuple;eauto.
+    apply list.Forall2_app_inv_l in H as (Ts1&Ts2&HTs1&HTs2&->).
+    apply list.Forall2_app_inv_l.
+    exists Ts1,Ts2;repeat split;auto.
+    inversion HTs2;subst.
+    constructor;auto.
+    admit. (* nested induction *)
+  - (* array *)
+    eapply beta_typed_arr;eauto.
+    admit. (* step in context *)
+  - (* array anon *)
+    admit.
+  - (* pack *)
+    eapply beta_typed.
+    2: eapply Ectx_step with (K:=ArrayCtx x0 K T);eauto.
+    simpl.
+    eapply beta_typed_pack;eauto.
+    admit. (* step in context *)
+  - (* pack anon *)
+    admit.
+  - (* hole context, toplevel reduction extract array *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eauto.
+  - (* extract array, step array *)
+    eapply beta_typed_extract_array;eauto.
+  - (* extract array, step index *)
+    eapply beta_typed.
+    2: admit. (* context under subst *)
+    eapply beta_typed_extract_array;eauto.
+  - (* hole context, toplevel reduction extract tuple *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eauto.
+  - (* extract tuple, step tuple *)
+    eapply beta_typed_extract_tuple;eauto.
+  - (* extract tuple, step index *)
+    eapply beta_typed.
+    1: eapply beta_typed_extract_tuple;eauto.
+    assert (is_val (Sigma Ts)) by admit.
+    eapply Ectx_step with (K:=ExtractRCtx (Sigma Ts) K H0);eauto.
+Admitted.
+
+
+
+
+
+
+
+
+
+
   induction K in A, Hty |- *;simpl in *.
   1: {
-    eapply typed_preservation_base_step. 
-    all: eassumption.
+    admit.
+    (* eapply typed_preservation_base_step. 
+    all: eassumption. *)
   }
+
+  - inversion Hty;subst;eauto.
+    + eapply beta_typed_pi;eauto.
+      admit. (* step in context *)
+    + eapply beta_typed_pi;eauto.
+      admit. (* same *)
+
+
+
   all: inversion Hty;subst.
+  all: eauto.
   - (* pi named *)
-    eapply typed_pi;eauto.
+    eapply beta_typed_pi;eauto.
     admit. (* step in context *)
   - (* pi anon *)
     admit. (* same *)
   - (* lam named *)
-    eapply typed_beta.
+    eapply beta_typed.
     2: eapply Ectx_step with (K:=PiCtx x0 K U);eauto.
     eapply typed_lam;eauto.
     + admit. (* step in context *)
