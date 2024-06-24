@@ -1367,6 +1367,108 @@ TODO:
 *)
 
 
+Hypothesis (typed_beta:
+  ∀ Γ e A B,
+  TY Γ ⊢ e : A →
+  contextual_step B A →
+  TY Γ ⊢ e : B
+).
+
+Lemma typed_preservation e e' A:
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  induction K in A, Hty |- *;simpl in *.
+  1: {
+    eapply typed_preservation_base_step. 
+    all: eassumption.
+  }
+  all: inversion Hty;subst.
+  - (* pi named *)
+    eapply typed_pi;eauto.
+    admit. (* step in context *)
+  - (* pi anon *)
+    admit. (* same *)
+  - (* lam named *)
+    eapply typed_beta.
+    2: eapply Ectx_step with (K:=PiCtx x0 K U);eauto.
+    eapply typed_lam;eauto.
+    + admit. (* step in context *)
+    + admit. (* step in context *)
+    + admit. (* step in context in assignable *)
+  - (* lambda anon *)
+    admit. (* same *)
+  - (* app left *)
+    eapply typed_app;eauto.
+  - (* app right *)
+    eapply typed_beta.
+    2: admit. (* context under subst *)
+    eapply typed_app;eauto. 
+    admit. (* assignable *)
+  - (* sigma cons *)
+    eapply typed_sigma_cons;eauto.
+    admit. (* step in context *)
+  - (* sigma anon cons *)
+    admit. (* same *)
+  - (* tuple *)
+    eapply typed_tuple;eauto.
+    apply list.Forall2_app_inv_l in H1 as (Ts1&Ts2&HTs1&HTs2&->).
+    apply list.Forall2_app_inv_l.
+    exists Ts1,Ts2;repeat split;auto.
+    inversion HTs2;subst.
+    constructor;auto.
+  - (* array *)
+    eapply typed_arr;eauto.
+    admit. (* step in context *)
+  - (* array anon *)
+    admit. (* same *)
+  - (* pack *)
+    eapply typed_beta.
+    2: eapply Ectx_step with (K:=ArrayCtx x0 K T);eauto.
+    eapply typed_pack;eauto.
+    admit. (* step in context *)
+  - (* pack anon *)
+    admit. (* same *)
+  - (* extract array, step array *)
+    eapply typed_extract_array;eauto.
+  - (* extract tuple, step tuple *)
+    eapply typed_extract_tuple;eauto.
+  - (* extract array, step index *)
+    eapply typed_beta.
+    2: admit. (* context under subst *)
+    eapply typed_extract_array;eauto.
+  - (* extract tuple, step index *)
+  (* is_val e and e : Sigma Ts *)
+    assert (is_val (Sigma Ts)) by admit.
+    eapply typed_beta.
+    2: {
+      eapply Ectx_step with (K:=ExtractRCtx (Sigma Ts) K H0);eauto.
+    }
+    eapply typed_extract_tuple;eauto.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Lemma typed_preservation e e' A:
   TY ∅ ⊢ e : A →
@@ -1406,7 +1508,17 @@ Proof.
     + eexists;split.
       * eapply typed_app;eauto.
       * now left.
-    + eexists;split.
+    + 
+
+      clear IHK.
+      eexists;split.
+      * eapply typed_app;eauto.
+    
+    
+    
+    
+    
+    eexists;split.
       * eapply typed_app;eauto.
         inversion HA_B;subst.
         destruct K0;simpl in *;try congruence;subst.
