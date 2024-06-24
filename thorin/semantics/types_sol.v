@@ -1365,6 +1365,72 @@ TODO:
   is assuming "value A" safe
   why is this different to assume value e?
 *)
+
+
+
+Lemma typed_preservation e e' A:
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  (* exists B, TY ∅ ⊢ e' : B /\ rtc contextual_step A B. *)
+  exists B, TY ∅ ⊢ e' : B /\ (A=B \/ contextual_step A B).
+Proof.
+  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  induction K in A, Hty |- *;simpl in *.
+  1: {
+    eexists;split;[|now left].
+    eapply typed_preservation_base_step. 
+    all: eassumption.
+  }
+  all: inversion Hty;subst.
+  - (* pi named *)
+    eexists;split;[|now left].
+    eapply typed_pi;eauto.
+    + admit. (* IH *)
+    + admit. (* TODO: reduction step in context *)
+  - (* pi anon *)
+    admit.
+  - (* lam named *)
+    exists (Pi x0 (fill K e2) U);split.
+    + eapply typed_lam;eauto.
+      * admit. (* IH *)
+      * admit. (* reduction step in context *)
+      * admit. (* reduction step in context *)
+      * admit. (* mutual induction assignable *)
+    + right.
+      eapply Ectx_step with (K:=PiCtx x0 K U);eauto.
+  - (* lam anon *)
+    admit.
+  - (* app left *)
+    destruct (IHK _ H2) as (B&He2_B&[<-|HA_B]).
+    + eexists;split.
+      * eapply typed_app;eauto.
+      * now left.
+    + eexists;split.
+      * eapply typed_app;eauto.
+        inversion HA_B;subst.
+        destruct K0;simpl in *;try congruence;subst.
+        -- (* hole context *)
+          inversion H1.
+        -- (* PiCtx *)
+          apply He2_B.
+
+    + eapply typed_app;eauto.
+      inversion He2_B;subst;eauto.
+    (* eexists;split;[|constructor]. *)
+    eapply typed_app;eauto.
+    admit. (* IH *)
+
+
+    eexists;split;[|constructor].
+    eapply typed_app;eauto.
+    admit. (* IH *)
+  - 
+
+
+
+
+
 Lemma typed_preservation e e' A:
   (* is_val A → *)
   normalized_type e →
@@ -1429,6 +1495,8 @@ Proof.
     *)
     + assumption.
   - (* app right context *)
+    inversion Hval;subst.
+
     exfalso.
     eapply values_dont_reduce. 
     1: {
