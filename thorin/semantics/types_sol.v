@@ -1388,9 +1388,9 @@ Inductive beta_syn_typed : typing_context → expr → expr → Prop :=
    | beta_typed_var Γ x A sA: Γ !! x = Some A → TY Γ ⊢' A : sA → TY Γ ⊢' (Var x) : A
    | beta_typed_pi Γ T sT x U sU s: TY Γ ⊢' T : sT → TY (<[x := T]> Γ) ⊢' U : sU → kind_dominance [sT; sU] s → TY Γ ⊢' (Pi (BNamed x) T U) : s
    | beta_typed_pi_anon Γ T sT U sU s: TY Γ ⊢' T : sT → TY Γ ⊢' U : sU → kind_dominance [sT; sU] s → TY Γ ⊢' (Pi BAnon T U) : s
-   | beta_typed_lam Γ x T ef U e sT sU: TY Γ ⊢' T : sT → TY (<[x := T]> Γ) ⊢' U : sU → TY (<[x := T]> Γ) ⊢' ef : Bool → type_assignable (<[x := T]> Γ) U e → TY Γ ⊢' (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
-   | beta_typed_lam_anon Γ T ef U e sT sU: TY Γ ⊢' T : sT → TY Γ ⊢' U : sU → TY Γ ⊢' ef : Bool → type_assignable Γ T e → TY Γ ⊢' (Lam BAnon T ef U e) : (Pi BAnon T U)
-   | beta_typed_app Γ e eT x T U: TY Γ ⊢' e : (Pi x T U) → type_assignable Γ T eT → TY Γ ⊢' (App e eT) : (subst' x eT U)
+   | beta_typed_lam Γ x T ef U e sT sU: TY Γ ⊢' T : sT → TY (<[x := T]> Γ) ⊢' U : sU → TY (<[x := T]> Γ) ⊢' ef : Bool → beta_type_assignable (<[x := T]> Γ) U e → TY Γ ⊢' (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
+   | beta_typed_lam_anon Γ T ef U e sT sU: TY Γ ⊢' T : sT → TY Γ ⊢' U : sU → TY Γ ⊢' ef : Bool → beta_type_assignable Γ T e → TY Γ ⊢' (Lam BAnon T ef U e) : (Pi BAnon T U)
+   | beta_typed_app Γ e eT x T U: TY Γ ⊢' e : (Pi x T U) → beta_type_assignable Γ T eT → TY Γ ⊢' (App e eT) : (subst' x eT U)
    | beta_typed_sigma_empty Γ: TY Γ ⊢' Sigma [] : Star
    | beta_typed_sigma_cons Γ x T s xs s' s'': TY Γ ⊢' T : s → TY (<[x := T]> Γ) ⊢' Sigma xs : s' → kind_dominance [s; s'] s'' → TY Γ ⊢' (Sigma ((BNamed x, T)::xs)) : s''
    | beta_typed_sigma_cons_anon Γ T s xs s' s'': TY Γ ⊢' T : s → TY Γ ⊢' Sigma xs : s' → kind_dominance [s; s'] s'' → TY Γ ⊢' (Sigma ((BAnon, T)::xs)) : s''
@@ -1405,10 +1405,10 @@ Inductive beta_syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢' e : A →
       contextual_step B A →
       TY Γ ⊢' e : B
-   | beta_typed_rev Γ A B e:
+   (* | beta_typed_rev Γ A B e:
       TY Γ ⊢' e : A →
       contextual_step A B →
-      TY Γ ⊢' e : B
+      TY Γ ⊢' e : B *)
 
 with beta_type_assignable : typing_context -> expr -> expr -> Prop :=
   | beta_assignable_typed Γ e T:
@@ -1437,35 +1437,120 @@ Proof.
   dependent induction H1;eauto.
   - *)
 
+
+(* Inductive normalize : expr -> expr -> Prop :=
+  | normalize_ *)
+
+
+
+
+(*
+only allow beta conversion for types at toplevel (empty context) ?
+=> would avoid deeper conversion issues
+(does normalization go under binders?)
+
+normalization from bottom up => inside out
+
+*)
+
+Variable normalized : expr → Prop.
+
+Print typing_context.
+Definition Forall_gmap {X} (P: string → X → Prop) (m: gmap string X) :=
+  forall x T, m !! x = Some T → P x T.
+Definition normalized_context (Γ: typing_context) :=
+  Forall_gmap (fun _ => normalized) Γ.
+
+Lemma unfold_norm_context_cons x T Γ:
+  (* normalized_context (<[x:=T]> Γ) ↔ normalized T ∧ normalized_context Γ. *)
+  normalized T → normalized_context Γ → normalized_context (<[x:=T]> Γ).
+Proof.
+  intros H1 H2 x' T' H3.
+  destruct (decide (x = x')).
+  - subst. rewrite lookup_insert in H3. inversion H3;subst. assumption.
+  - rewrite lookup_insert_ne in H3;auto.
+    unfold normalized_context, Forall_gmap in H2.
+    eapply H2;eassumption.
+Qed.
+
+#[export]
+Hint Resolve unfold_norm_context_cons : core.
+
 Lemma beta_typed_typed Γ e A:
   TY Γ ⊢' e : A →
-  normalized_type e →
+  (* everything in context normalized *)
+  (* (forall x T, Γ !! x = Some T → normalized T) → *)
+  normalized_context Γ →
+  normalized e →
   TY Γ ⊢ e : A.
 Proof.
-  intros H1 H2.
+  intros H1 HΓ Hnorm.
   induction H1;eauto.
+  (*
   - (* var *)
     econstructor;eauto. apply IHbeta_syn_typed.
-    admit.
+    admit. 
+    (* 
+      know x is normalized but want the type of x (A) is normalized
+      solution: context normalized 
+    *)
+  *)
   - (* pi named *)
-    inversion H2;subst.
+    (* inversion H2;subst. *)
     econstructor;eauto.
-    + apply IHbeta_syn_typed1. admit.
-    + apply IHbeta_syn_typed2. admit. (* TODO: does not hold: we recurse (necessarily) under binder with changed gamma *)
+    + apply IHbeta_syn_typed1;eauto. all: admit. 
+      (* 
+        norm T 
+        => follows from norm (Pi x T U)
+      *)
+    + apply IHbeta_syn_typed2;eauto. 
+      * (* norm context under binder *)
+        apply unfold_norm_context_cons;eauto.
+        admit. (* norm T => rest is assumption *)
+      * admit. (* norm U *)
+        (*
+          norm U
+          => follows from norm (Pi x T U)
+        *)
   - (* pi anon *)
     admit.
   - (* lambda named *)
     econstructor;eauto.
-    + apply IHbeta_syn_typed1. admit.
-    + apply IHbeta_syn_typed2. admit.
-    + apply IHbeta_syn_typed3. admit.
+    (* we have norm (λ (x:T) @ef : U, e) *)
+    + apply IHbeta_syn_typed1;eauto. admit. (* norm T *)
+    + apply IHbeta_syn_typed2;eauto. all: admit. (* norm U *)
+    + apply IHbeta_syn_typed3;eauto. all: admit. (* norm ef *)
+    + admit. (* assignable mutual induction *)
   - (* lambda anon *)
     admit.
   - (* app *)
     econstructor;eauto.
-    inversion H2;subst.
+    2: admit. (* assignable mutual induction *)
     apply IHbeta_syn_typed. assumption.
-  - (* sigma *)
+    admit. (* norm (e eT) => norm e *)
+  - (* sigma cons *)
+    admit. (* TODO *)
+  - (* sigma cons anon *)
+    admit.
+  - (* array *)
+    admit. (* TODO *)
+  - (* array anon *)
+    admit.
+  - (* pack *)
+    admit. (* TODO *)
+  - (* pack anon *)
+    admit.
+  - (* extract array *)
+    admit. (* TODO *)
+  - (* extract tuple *)
+    admit.
+  - (* beta *)
+
+    admit. (* TODO *)
+    (* 
+  - (* rev beta *)
+    admit.
+    *)
 Abort.
 
 
