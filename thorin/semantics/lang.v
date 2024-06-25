@@ -134,6 +134,56 @@ Definition subst' (mx : binder) (es : expr) : expr → expr :=
 (* Notation "e '.' '[' e2 '/' x ']'" := (subst' x e2 e) (at level 20).
 Check (Lam (BNamed "x") Nat (Var "x") Nat (Var "x")).[LitNat 3 / "x"]. *)
 
+  (* instantiate e via subst with x = LitIdx n 0 ... ListIdx (n-1) *)
+(* Definition instantiate (x:string) (n:nat) (e:expr) : list expr.
+  induction n.
+  - exact [].
+  - refine (_ :: IHn).
+    refine (subst x (LitIdx n Fin.F1) e). *)
+
+(*
+  enumerate all fin numbers up to n
+  then map over the list with subst
+*)
+
+
+
+Inductive normalize_step : expr -> expr -> Prop :=
+  (* no let *)
+  | normalize_extract_one e:
+    (* TODO: need normalized of e? *)
+    normalize_step (Extract e (LitIdx 1 Fin.F1)) e
+  | normalize_tuple_one e:
+    normalize_step (Tuple [e]) e
+  | normalize_sigma_one xT:
+    normalize_step (Sigma [xT]) (Sigma [xT])
+  (* | normalize_tuple_beta *)
+  (* | normalize_pack_beta *)
+  (* | normalize_tuple_eta *)
+  | normalize_pack_tuple n e:
+    (* same as repeat *)
+    normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
+  | normalize_array_sigma n T:
+    normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T)
+  (* | normalize_beta *)
+  (* | normalize_tuple_pack x n e: *)
+    (* normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple ( *)
+  (* | normalize_sigma_array  *)
+.
+
+(* TODO: normalize in contexts *)
+
+(* TODO: Definition normalized  *)
+
+(*
+lemma is_val -> normalized
+*)
+
+
+
+
+
+
 (* https://coq.inria.fr/doc/v8.18/refman/language/core/conversion.html *)
 Inductive base_step : expr -> expr -> Prop :=
 (* 'real' steps (congruence steps later) *)
