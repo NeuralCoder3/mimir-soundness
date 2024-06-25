@@ -890,12 +890,23 @@ Lemma typed_progress Γ e A:
 Proof.
   intros H.
   (* remember ∅ as Γ. *)
-  dependent induction H;eauto using is_val.
-  - admit.
+  dependent induction H;eauto 10 using is_val.
+  - admit. (* TODO: var *)
+  - (* pi *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + destruct H2. right. eexists. 
+      eauto. (* uses contextual step lemmas *)
+  - (* pi anon *)
+    destruct IHsyn_typed1.
+    + left. now constructor.
+    + destruct H2. right. eexists. 
+      eauto.
   - (* lambda *)
     destruct IHsyn_typed1.
     + left. now constructor.
-    + destruct H3. right. eexists. eauto. (* uses contextual step lemmas *)
+    + destruct H3. right. eexists. 
+      eauto. (* uses contextual step lemmas *)
   - (* lambda anon -- same as named *)
     destruct IHsyn_typed1.
     + left. now constructor.
@@ -1056,34 +1067,6 @@ Proof.
     inversion H3;subst.
     specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T [HnthT HT]].
     admit. (* TODO: need normalization *)
-    (* remember i as t. (* not sure if necessary, avoid that an i1 is introduced *)
-    rewrite Heqt in H5.
-    inversion H5;subst.  *)
-    (* pose proof H2 as Hlen. *)
-    (* apply Forall2_length in Hlen.
-    (* inversion H5;subst. *)
-    assert (exists T, 
-      nth_error Ts0 (` (Fin.to_nat i)) = Some T
-    ) as [T HT] by admit. (* we need i : fin(length Ts0)  instead length es (by H10 and H6) *)
-    assert (
-      TY ∅ ⊢ e' : T
-    ).
-    {
-      (* by H2 *)
-      Search Forall2.
-    } *)
-
-
-    (* assert (exists T, 
-      nth_error Ts0 (` (Fin.to_nat i)) = Some T
-    ).
-    {
-      clear Hstep Hty H1 H5.
-      rewrite H10 in i.
-      apply nth_fin.
-
-    } *)
-    (* inversion H6;subst;clear H6. *)
   - (* Iota Pack *)
     (* Pack: Array *)
     inversion H3;subst.
@@ -1104,6 +1087,103 @@ Admitted.
 
 Definition ectx_typing (K: ectx) A B :=
   ∀ e, TY ∅ ⊢ e : A → TY ∅ ⊢ (fill K e) : B.
+
+Lemma fill_typing_compose K e A B:
+  TY ∅ ⊢ e : B →
+  ectx_typing K B A →
+  TY ∅ ⊢ fill K e : A.
+Proof.
+  intros H1 H2; by eapply H2.
+Qed.
+
+(* TODO: we want is_val <-> ~ reducibile *)
+Lemma values_dont_reduce e:
+  is_val e → ¬ reducible e.
+Proof.
+  intros Hv Hred.
+  destruct Hred.
+  destruct H as [K e1 e2 -> -> Hred].
+  induction K;simpl in Hv;inversion Hv;subst;try congruence.
+  all: try (now inversion Hred).
+  - (* Idx #n, Idx -> ... *)
+    destruct K;simpl in *;inversion H0;subst.
+    inversion Hred.
+  - (* Idx #n, #n -> ... *)
+    destruct K;simpl in H2;inversion H2;subst.
+    inversion Hred.
+  - apply Forall_app in H1 as [H1 H2].
+    inversion H2;subst.
+    congruence.
+Qed.
+
+
+Lemma typed_preservation e e' A:
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+Admitted.
+
+Lemma typed_safety e1 e2 A:
+  TY ∅ ⊢ e1 : A →
+  rtc contextual_step e1 e2 →
+  is_val e2 ∨ reducible e2.
+Proof.
+  induction 2; eauto using typed_progress, typed_preservation.
+Qed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 (* Lemma fill_typing_decompose K e A:
@@ -1206,34 +1286,6 @@ Admitted. *)
   (* unfold ectx_typing; induction K in A |-*; simpl; inversion 1; subst; eauto.
   all: edestruct IHK as (? & ? & ?); eauto.
 Qed. *)
-
-Lemma fill_typing_compose K e A B:
-  TY ∅ ⊢ e : B →
-  ectx_typing K B A →
-  TY ∅ ⊢ fill K e : A.
-Proof.
-  intros H1 H2; by eapply H2.
-Qed.
-
-(* TODO: we want is_val <-> ~ reducibile *)
-Lemma values_dont_reduce e:
-  is_val e → ¬ reducible e.
-Proof.
-  intros Hv Hred.
-  destruct Hred.
-  destruct H as [K e1 e2 -> -> Hred].
-  induction K;simpl in Hv;inversion Hv;subst;try congruence.
-  all: try (now inversion Hred).
-  - (* Idx #n, Idx -> ... *)
-    destruct K;simpl in *;inversion H0;subst.
-    inversion Hred.
-  - (* Idx #n, #n -> ... *)
-    destruct K;simpl in H2;inversion H2;subst.
-    inversion Hred.
-  - apply Forall_app in H1 as [H1 H2].
-    inversion H2;subst.
-    congruence.
-Qed.
 
 Lemma value_characterization e:
   reducible e \/ is_val e.

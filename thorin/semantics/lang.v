@@ -419,6 +419,7 @@ Qed.
 
 #[export]
 Hint Resolve
+  contextual_step_pi
   contextual_step_lam
   contextual_step_app_l
   contextual_step_app_r
