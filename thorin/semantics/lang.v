@@ -220,6 +220,7 @@ Inductive normalize_step : expr -> expr -> Prop :=
     (* replicate is the same as repeat *)
     normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
   | normalize_array_sigma n T:
+    n > 1 ->
     normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T)
   | normalize_beta x T ef U eb ea:
     (* TODO: ef[ea/x] beta equiv true *)

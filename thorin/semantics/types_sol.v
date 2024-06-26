@@ -654,14 +654,23 @@ Proof.
     + apply kind_subst_invariant_apply;eassumption.
   - (* Tuple *)
     apply typed_tuple with (Ts:=map (subst a e') Ts).
-    2: {
-      f_equal.
-      clear H.
-      induction Ts;simpl.
-      - reflexivity.
-      - f_equal. apply IHTs.
-    }
-    admit. (* TODO: needs nested induction *)
+    + admit.
+      (* 
+        we know 
+          Sigma Ts ->n T
+        we want
+          Sigma ? ->n T[e'/a]
+
+        TODO: need nested induction
+        for substing in each T
+      *)
+    + admit.
+      (*
+        want to show that Sigma (subst Ts) ->n subst T
+        e.g. normalization is subst invariant 
+        TODO: does this even hold?
+        subst could allow for additional normalizations
+      *)
   - (* Array *)
     econstructor.
     + destruct H;subst;simpl;[now left|now right].
@@ -686,6 +695,10 @@ Proof.
       1: admit. (* TODO: no name clash *)
       eapply IHsyn_typed2;eauto.
       apply insert_commute. congruence.
+    + admit. (*
+      need normalize_eval also Array
+      TODO: does this hold?
+    *)
   - (* Extract array *)
     rewrite subst'_distr.
     2: {
@@ -781,8 +794,10 @@ Lemma canonical_value_idx Γ e (n:nat):
   exists i, e = LitIdx n i.
 Proof.
   intros Hty Hv.
-  inversion Hty;subst;try naive_solver;inversion Hv;subst;no_nonsense_canonical.
-Qed.
+  inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
+  - exfalso. admit. (* Sigma will only every normalize to Sigma (not Idx) *)
+  - exfalso. admit. (* Same with Array *)
+Admitted.
 
 (*
   We take a look at a (possibly) interesting example to get a feeling for the type system
@@ -808,7 +823,13 @@ Proof.
     inversion H2;subst;clear H2.
     inversion H0;subst;clear H0.
     simpl in H3.
-    congruence. (* TODO: this currently just works because normalization is not implemented *)
+    admit. (* TODO: 
+      Sigma [] ->n <<n;?>>
+      where result is <<x:en;T>>
+      => x = Anon, en = 0, T = ? (anything)
+      do we want n > 0?
+    *)
+     (* TODO: this currently just works because normalization is not implemented *)
   - (* sigma tuple extract *)
     (*
       proof idea:
@@ -822,12 +843,17 @@ Proof.
       inversion H0;subst.
       simpl in *.
       inversion H4;subst.
-      done.
+      (*  
+        TODO: either Sigma [] ->n Sigma Ts
+        is contradictory or Ts = []
+      *)
+      (* done. *)
+      admit.
     }
     simpl in H3.
     pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
     inversion i.
-Qed.
+Admitted.
 
 Lemma canonical_value_pi Γ e x T U:
   TY Γ ⊢ e : Pi x T U →
@@ -843,7 +869,9 @@ Proof.
     right. eauto.
   - (* lambda anon *)
     right. eauto.
-Qed.
+  - exfalso. admit. (* Sigma will only every normalize to Sigma (not Pi) *)
+  - exfalso. admit. (* Same with Array *)
+Admitted.
 
 Lemma canonical_value_nat Γ e:
   TY Γ ⊢ e : Nat →
@@ -853,26 +881,48 @@ Lemma canonical_value_nat Γ e:
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
-Qed.
+  - exfalso. admit. (* Sigma will only every normalize to Sigma (not Nat) *)
+  - exfalso. admit. (* Same with Array *)
+Admitted.
 
 Lemma canonical_value_sigma Γ e Ts:
   TY Γ ⊢ e : Sigma Ts →
   is_val e ->
   
-  exists es, e = Tuple es 
+  (exists es, e = Tuple es 
     /\ Forall is_val es
-    /\ length es = length Ts
-    /\ Forall2 (λ e '(x,T), TY Γ ⊢ e : T) es Ts. (* not needed *)
+    /\ length es = length Ts) \/
+  (exists x e',
+    e = Pack x (LitNat (length Ts)) e'
+  ).
+  (* TODO: do we know anything about e' *)
+    (* /\ Forall2 (λ e '(x,T), TY Γ ⊢ e : T) es Ts.  *)
+    (* not needed *)
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
-  eexists.
-  split;[reflexivity|].
-  split;[assumption|].
-  inversion H0;subst;clear H0.
-  clear Hty H2 Hv.
-  induction H;simpl;split;auto;destruct IHForall2;auto.
-Qed.
+  + (* 
+    Sigma -> Sigma normalization
+    TODO: need additional lemma that normalization preserves at least the length
+  *)
+    left.
+    eexists.
+    split;[reflexivity|].
+    split;[assumption|].
+    admit.
+    (* inversion H0;subst;clear H0.
+    clear Hty H2 Hv. *)
+    (*
+    induction H;simpl;split;auto;destruct IHForall2;auto.
+    - exfalso. admit. (* Sigma will only every normalize to Sigma (not Nat) *)
+    - exfalso. admit. (* Same with Array *)
+    *)
+  + (* pack whose array type was normalized into sigma *)
+    right.
+    do 2 eexists;f_equal;eauto.
+    pose proof (canonical_value_nat _ _ H H3) as [n ->].
+    admit. (* TODO: need that normalization Array to Sigma preserves length *)
+Admitted.
 
 
 Definition add_binder x e Γ := 
@@ -897,12 +947,17 @@ Proof.
   intros Hty Hv.
   inversion Hty;subst;simpl.
   all: inversion Hv;subst;simpl;try no_nonsense_canonical.
-  - naive_solver.
-  - (* Pack named *)
-    eauto 10.
+  - (* TODO: Tuple could be pack (if Sigma normalized to array) *)
+    admit.
+  - eexists;repeat split. 
+    all: admit. 
+    (*
+      TODO: needs normalization lemmas
+      that Array -> Array then the vars are the same
+    *)
   - (* Pack anon *)
     eauto 10.
-Qed.
+Admitted.
 
 
 
@@ -966,7 +1021,11 @@ Proof.
           (* e: Pi x T U /\ is_val e => canonical form *)
           eexists. eapply base_contextual_step.
           eapply BetaS. 3: reflexivity. 
-          all: eassumption.
+          all: try eassumption.
+          admit. (* here, we are in lambda app, where left are values
+            but we need normalized =>
+            TODO: lemma needs to talk about normalization (either it is normalized or normalization possible)
+           *)
       * right. destruct HredT. eexists. eauto. 
     + right. destruct H1. eexists. eauto. 
   - (* sigma cons *)
@@ -1022,16 +1081,22 @@ Proof.
     + destruct IHsyn_typed2.
       * right.
         pose proof (canonical_value_idx _ _ _ H1 H2) as [i ->].
-        pose proof (canonical_value_sigma _ _ _ H H0) as [es (->&Hval&Hlen&Hty)].
-        pose proof (nth_fin _ es).
-        rewrite Hlen in H3; specialize (H3 i); destruct H3.
-        eexists.
-        apply base_contextual_step.
-        (* IotaTupleS -- we know that e has to be a tuple as a pack will always have array type *)
-        apply IotaTupleS.
-        -- assumption.
-        -- assumption.
-        -- apply H3.
+        pose proof (canonical_value_sigma _ _ _ H H0) as [[es (->&Hval&Hlen)]|].
+        -- (* a tuple as expected *)
+          pose proof (nth_fin _ es).
+          rewrite Hlen in H6; specialize (H6 i); destruct H6.
+          eexists.
+          apply base_contextual_step.
+          (* IotaTupleS -- we know that e has to be a tuple as a pack will always have array type *)
+          apply IotaTupleS.
+          ++ assumption.
+          ++ assumption.
+          ++ apply H6.
+        -- destruct H6 as (x&eb&->).
+          (* a pack instead that was normalized *)
+          eexists.
+          apply base_contextual_step.
+          apply IotaPackS;eauto.
       * right. destruct H2. eexists. eauto. 
     + right. destruct H0. eexists. eauto.
 Admitted.
@@ -1089,24 +1154,49 @@ Proof.
       admit. (* TODO: needs assignable induction *)
   - (* Iota Tuple *)
     (* Tuple: Array *)
+
     inversion H4;subst.
-    inversion H5.
-    (* TODO: this rule coincides conceptually with the one below if normalization is added *)
+    specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T' [HnthT' HT']].
+    (*
+      we have 
+      e' : T'
+      with 
+      nth Ts i = T'
+      and Ts ->n <x:en;T>
+      and want e' : T[x/Idx n i]
+
+      TODO: need normalization on the type again
+    *)
+    admit.
   - (* Iota Tuple *)
     (* Tuple: Sigma *)
-    (* TODO: this case changes with changes in the typed_extract_tuple rule *)
-    (* TODO: normalization needed here (Extract of T is not enough for U, we need the concrete T) *)
     inversion H3;subst.
-    specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T [HnthT HT]].
+    specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T' [HnthT' HT']].
+    (* 
+    we have
+    T#i ->n A
+    and e' : T'
+    and nth Ts0 i = T'
+    and want e' : A
+    and Ts0 ->n Ts
+
+    TODO: is there a normalization in the result missing?
+     *)
     admit. (* TODO: need normalization *)
   - (* Iota Pack *)
     (* Pack: Array *)
     inversion H3;subst.
     + (* named *)
       simpl in *.
-      replace (TY ∅ ⊢ subst x1 ei e0 : subst x1 ei T)
-        with (TY subst x1 ei <$> ∅ ⊢ subst x1 ei e0 : subst x1 ei T) by now rewrite fmap_empty.
-      eapply typed_substitutivity;eassumption.
+      (* TODO: need normalization lemma Array -> Array *)
+      replace T with T0 by admit.
+      replace x0 with (BNamed x1) by admit.
+      simpl.
+      replace (TY ∅ ⊢ subst x1 ei e0 : subst x1 ei T0)
+        with (TY subst x1 ei <$> ∅ ⊢ subst x1 ei e0 : subst x1 ei T0) by now rewrite fmap_empty.
+      eapply typed_substitutivity;eauto.
+      replace en with (LitNat n) by admit.
+      eauto.
     + (* anon *)
       simpl in *.
       assumption.
