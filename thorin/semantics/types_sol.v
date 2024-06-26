@@ -44,6 +44,38 @@ Definition Bool := App Idx 2.
 (* TODO: kind vs sort *)
 Definition sort s := s = Star \/ s = Box.
 
+Require Import Coq.Program.Wf.
+
+(*
+e, n, Ts: binder*expr
+
+Tj' = Tj[e#0_n/x0]...[e#(j-1)_n/x_(j-1)] (j < n)
+=> [
+  T0,
+  subst x0 (Extract e (LitIdx n i)) T1,
+  ...
+
+Note: we use Function instead of Program Fixpoint for the _equation lemma
+*)
+Fixpoint close_subst_aux (e:expr) (n:nat) (Ts: list ((binder*expr)*Fin.t n)) 
+  : list expr :=
+  match Ts with
+  | [] => []
+  | ((x,T),idx)::Tr => 
+    T :: 
+    let Tr' := close_subst_aux e n Tr in 
+    (* now with rest substituted in, lastly subst our term *)
+    map (subst' x (Extract e (LitIdx n idx))) Tr'
+    (* let Tr' :=  *)
+    (* close_subst e n 
+      (map (fun '((b_j,T_j),idx_j) => ((b_j,subst' x (Extract e (LitIdx n idx)) T_j),idx_j)) Ts') *)
+  end.
+
+Definition close_subst e n Ts :=
+  let (idxs,_) := fin_list n in
+  close_subst_aux e n (combine Ts idxs).
+
+
 Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
 Reserved Notation "'TY' Γ ⊢ A ← e" (at level 74, e, A at next level).
 Inductive syn_typed : typing_context → expr → expr → Prop :=
@@ -132,12 +164,13 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ (Sigma ((BAnon, T)::xs)) : s''
     | typed_tuple Γ es Ts T:
       Forall2 (syn_typed Γ) es Ts →
-      (* TODO: normalize to T, 
+      (* 
       TODO: how to handle [bool, fun x -> if x then 1 else 0] : [T:*, T -> Nat] 
       
       alternative: name each fresh, typed under previous names
       *)
-      T = Sigma (map (fun T => (BAnon, T)) Ts) ->
+      (* T = Sigma (map (fun T => (BAnon, T)) Ts) -> *)
+      normal_eval (Sigma (map (fun T => (BAnon, T)) Ts)) T →
       TY Γ ⊢ (Tuple es) : T
     | typed_arr Γ x en T s:
       (* TODO: mistake in pdf (s vs s') *)
@@ -151,11 +184,11 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ T : s →
       TY Γ ⊢ (Array BAnon en T) : s
-    | typed_pack Γ x en e T:
+    | typed_pack Γ x en e T U:
       TY Γ ⊢ en : Nat →
       TY (<[x := App Idx en]> Γ) ⊢ e : T →
-      (* TODO: normalize array to U *)
-      TY Γ ⊢ (Pack (BNamed x) en e) : (Array (BNamed x) en T)
+      normal_eval (Array (BNamed x) en T) U →
+      TY Γ ⊢ (Pack (BNamed x) en e) : U
     | typed_pack_anon Γ en e T:
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ e : T →
@@ -170,13 +203,12 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ e : (Sigma Ts) →
       n = length Ts →
       TY Γ ⊢ ei : (App Idx n) →
-      (* TODO: recursive closure *)
-      Ts' = Ts ->
+      Ts' = close_subst e n Ts →
       (* TODO: normalize tuple to T (needed for convergence (eventually reach array)) *)
-      T = Sigma Ts' ->
+      (* T = Sigma Ts' -> *)
+      normal_eval (Tuple Ts') T →
       TY Γ ⊢ T : s ->
-      (* TODO: normalize type to U *)
-      U = Extract T ei ->
+      normal_eval (Extract T ei) U ->
       TY Γ ⊢ (Extract e ei) : U
 
 with type_assignable : typing_context -> expr -> expr -> Prop :=
@@ -234,7 +266,7 @@ so at application point, it works out
 
 
 (* TODO: why do we need this proof? *)
-Lemma syn_typed_closed Γ e A X :
+(* Lemma syn_typed_closed Γ e A X :
   TY Γ ⊢ e : A →
   (∀ x, x ∈ dom Γ → x ∈ X) →
   is_closed X e.
@@ -305,7 +337,7 @@ Proof.
     - right.
     apply Hx. apply elem_of_dom. assumption.
   }
-Admitted.
+Admitted. *)
 
 Lemma typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
@@ -1096,25 +1128,6 @@ Proof.
   intros H1 H2; by eapply H2.
 Qed.
 
-(* TODO: we want is_val <-> ~ reducibile *)
-Lemma values_dont_reduce e:
-  is_val e → ¬ reducible e.
-Proof.
-  intros Hv Hred.
-  destruct Hred.
-  destruct H as [K e1 e2 -> -> Hred].
-  induction K;simpl in Hv;inversion Hv;subst;try congruence.
-  all: try (now inversion Hred).
-  - (* Idx #n, Idx -> ... *)
-    destruct K;simpl in *;inversion H0;subst.
-    inversion Hred.
-  - (* Idx #n, #n -> ... *)
-    destruct K;simpl in H2;inversion H2;subst.
-    inversion Hred.
-  - apply Forall_app in H1 as [H1 H2].
-    inversion H2;subst.
-    congruence.
-Qed.
 
 
 Lemma typed_preservation e e' A:
@@ -1131,6 +1144,7 @@ Lemma typed_safety e1 e2 A:
 Proof.
   induction 2; eauto using typed_progress, typed_preservation.
 Qed.
+
 
 
 

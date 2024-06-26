@@ -134,91 +134,15 @@ Definition subst' (mx : binder) (es : expr) : expr → expr :=
 (* Notation "e '.' '[' e2 '/' x ']'" := (subst' x e2 e) (at level 20).
 Check (Lam (BNamed "x") Nat (Var "x") Nat (Var "x")).[LitNat 3 / "x"]. *)
 
-  (* instantiate e via subst with x = LitIdx n 0 ... ListIdx (n-1) *)
-(* Definition instantiate (x:string) (n:nat) (e:expr) : list expr.
-  induction n.
-  - exact [].
-  - refine (_ :: IHn).
-    refine (subst x (LitIdx n Fin.F1) e). *)
-
-(*
-  enumerate all fin numbers up to n
-  then map over the list with subst
-*)
 
 
-
-Inductive normalize_step : expr -> expr -> Prop :=
-  (* no let *)
-  | normalize_extract_one e:
-    (* TODO: need normalized of e? *)
-    normalize_step (Extract e (LitIdx 1 Fin.F1)) e
-  | normalize_tuple_one e:
-    normalize_step (Tuple [e]) e
-  | normalize_sigma_one xT:
-    normalize_step (Sigma [xT]) (Sigma [xT])
-  (* | normalize_tuple_beta *)
-  (* | normalize_pack_beta *)
-  (* | normalize_tuple_eta *)
-  | normalize_pack_tuple n e:
-    (* same as repeat *)
-    normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
-  | normalize_array_sigma n T:
-    normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T)
-  (* | normalize_beta *)
-  (* | normalize_tuple_pack x n e: *)
-    (* normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple ( *)
-  (* | normalize_sigma_array  *)
-.
-
-(* TODO: normalize in contexts *)
-
-(* TODO: Definition normalized  *)
-
-(*
-lemma is_val -> normalized
-*)
-
-
-
-
-
-
-(* https://coq.inria.fr/doc/v8.18/refman/language/core/conversion.html *)
-Inductive base_step : expr -> expr -> Prop :=
-(* 'real' steps (congruence steps later) *)
-  | BetaS x T f U elam earg e' :
-  (* TODO: necessary to completely eval T? should probably be *)
-    is_val T ->
-    is_val earg ->
-    e' = subst' x earg elam ->
-    base_step (App (Lam x T f U elam) earg) e'
-  | IotaTupleS es n (i:Fin.t n) e:
-    (* extract from a tuple if all value *)
-    (* needs canonical form lemma for Idx n *)
-    (*
-    for nth, we need a proof about the size
-    alternatively, a vector would work but we would have the size everywhere
-    *)
-    Forall is_val es ->
-    length es = n ->
-    nth_error es (` (Fin.to_nat i)) = Some e ->
-    base_step (Extract (Tuple es) (LitIdx n i)) e
-  (* extract of pack *)
-  | IotaPackS x e n ei e':
-    is_val ei -> (* implies ei = LitIdx n i (via canonical values?) *)
-    e' = subst' x ei e ->
-    base_step (Extract (Pack x (LitNat n) e) ei) e'
-  .
-
-
+Require Import Coq.Program.Equality.
 
 Lemma fin_inc n (i:Fin.t n): (` (Fin.to_nat (Fin.FS i))) = S (` (Fin.to_nat i)).
 Proof.
-  induction i; simpl.
-  - reflexivity.
-  - admit.
-Admitted.
+  simpl.
+  now destruct Fin.to_nat.
+Defined.
 
 Lemma nth_fin A (xs:list A) (i:Fin.t (length xs)) :
   exists x, nth_error xs (` (Fin.to_nat i)) = Some x.
@@ -233,12 +157,188 @@ Proof.
       now rewrite fin_inc.
 Qed.
 
+(*
+  enumerate all fin numbers up to n
+  then map over the list with subst
+*)
+Definition fin_list (n:nat) : 
+  {xs : list (Fin.t n) | 
+    length xs = n /\ 
+    (forall (i:Fin.t n), nth_error xs (` (Fin.to_nat i)) = Some i)
+  }.
+  induction n.
+  - exists []. split; auto.
+    intros i. inversion i.
+  - destruct IHn as [xs [Hlen Hnth]].
+    exists (Fin.F1 :: map (fun i => Fin.FS i) xs);split.
+    + simpl. f_equal. 
+      now rewrite map_length.
+    + intros i.
+      dependent destruction i.
+      * reflexivity.
+      * rewrite fin_inc.
+        simpl.
+        now apply map_nth_error.
+Defined.
+
+(* instantiate e via subst with x = LitIdx n 0 ... ListIdx (n-1) *)
+Definition instantiate (x:string) (n:nat) (e:expr) : list expr.
+  destruct (fin_list n) as [xs [Hlen Hnth]].
+  refine (map (fun i => subst x (LitIdx n i) e) xs).
+Defined.
+
+Corollary instantiate_correct x n e:
+  forall i, nth_error (instantiate x n e) (` (Fin.to_nat i)) = Some (subst x (LitIdx n i) e).
+Proof.
+  unfold instantiate.
+  destruct (fin_list n) as [xs [Hlen Hnth]].
+  intros i.
+  change (subst x (LitIdx n i) e) with ((fun i => subst x (LitIdx n i) e) i).
+  now apply map_nth_error.
+Qed.
+
+(* TODO: require normalized subexpressions? (would be needed for in-to-out-order) *)
+Inductive normalize_step : expr -> expr -> Prop :=
+  (* no let *)
+  | normalize_extract_one e:
+    (* TODO: need normalized of e? *)
+    normalize_step (Extract e (LitIdx 1 Fin.F1)) e
+  | normalize_tuple_one e:
+    normalize_step (Tuple [e]) e
+  | normalize_sigma_one xT:
+    normalize_step (Sigma [xT]) (Sigma [xT])
+  | normalize_tuple_beta xs n i e:
+    length xs = n ->
+    nth_error xs (` (Fin.to_nat i)) = Some e ->
+    (* TODO: maybe we could model this using vectors *)
+    normalize_step (Extract (Tuple xs) (LitIdx n i)) e
+  | normalize_pack_beta en e ei:
+    normalize_step (Extract (Pack BAnon en e) ei) e
+  | normalize_tuple_eta e n:
+    normalize_step (Tuple (map (fun i => Extract e (LitIdx n i)) (ltac: (destruct (fin_list n) as [xs _];exact xs)))) e
+  | normalize_pack_tuple n e:
+    (* replicate is the same as repeat *)
+    normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
+  | normalize_array_sigma n T:
+    normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T)
+  | normalize_beta x T ef U eb ea:
+    (* TODO: ef[ea/x] beta equiv true *)
+    normalize_step (App (Lam x T ef U eb) ea) (subst' x ea eb)
+  | normalize_tuple_pack x n e:
+    normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
+  | normalize_sigma_array x n T:
+    normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T)))
+.
+
+(* TODO: do we need to require left-to-right or in-to-out order? *)
+Inductive full_ectx :=
+  | FHoleCtx
+  | FPi1 (x:binder) (K: full_ectx) (U:expr)
+  | FPi2 (x:binder) (K: expr) (U:full_ectx)
+  | FLam1 (x:binder) (T: full_ectx) (f:expr) (U:expr) (e:expr)
+  | FLam2 (x:binder) (T: expr) (f:full_ectx) (U:expr) (e:expr)
+  | FLam3 (x:binder) (T: expr) (f:expr) (U:full_ectx) (e:expr)
+  | FLam4 (x:binder) (T: expr) (f:expr) (U:expr) (e:full_ectx)
+  | FApp1 (K: full_ectx) (e2 : expr)
+  | FApp2 (e1 : expr) (K: full_ectx)
+  | FSigma (xs1: list (binder * expr)) (x:binder) (K: full_ectx) (xs2: list (binder * expr))
+  | FTuple (es1:list expr) (K: full_ectx) (es2: list expr)
+  | FArray1 (x:binder) (en: full_ectx) (T:expr)
+  | FArray2 (x:binder) (en: expr) (T: full_ectx)
+  | FPack1 (x:binder) (en: full_ectx) (e:expr)
+  | FPack2 (x:binder) (en: expr) (e: full_ectx)
+  | FExtract1 (K: full_ectx) (ei:expr)
+  | FExtract2 (e:expr) (K: full_ectx)
+  .
+
+Fixpoint full_fill (K:full_ectx) (e:expr) : expr :=
+  match K with
+  | FHoleCtx => e
+  | FPi1 x K U => Pi x (full_fill K e) U
+  | FPi2 x T K => Pi x T (full_fill K e)
+  | FLam1 x K f U e => Lam x (full_fill K e) f U e
+  | FLam2 x T K U e => Lam x T (full_fill K e) U e
+  | FLam3 x T f K e => Lam x T f (full_fill K e) e
+  | FLam4 x T f U K => Lam x T f U (full_fill K e)
+  | FApp1 K e2 => App (full_fill K e) e2
+  | FApp2 e1 K => App e1 (full_fill K e)
+  | FSigma xs1 x K xs2 => Sigma (xs1 ++ (x,full_fill K e) :: xs2)
+  | FTuple es1 K es2 => Tuple (es1 ++ full_fill K e :: es2)
+  | FArray1 x K T => Array x (full_fill K e) T
+  | FArray2 x en K => Array x en (full_fill K e)
+  | FPack1 x K e => Pack x (full_fill K e) e
+  | FPack2 x en K => Pack x en (full_fill K e)
+  | FExtract1 K ei => Extract (full_fill K e) ei
+  | FExtract2 e K => Extract e (full_fill K e)
+  end.
+
+Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K e1' e2' :
+    e1 = full_fill K e1' → e2 = full_fill K e2' →
+    normalize_step e1' e2' → full_contextual_step e1 e2.
+
+Definition normalizable (e : expr) :=
+  ∃ e', full_contextual_step e e'.
+
+Definition normalized (e : expr) :=
+  ~ ∃ e', full_contextual_step e e'.
+
+  (* maybe as inductive? *)
+  (* perform all possible normalization redexes *)
+Definition normal_eval e e' :=
+  rtc full_contextual_step e e' ∧ normalized e'.
+
+
+(*
+Importantly, we do not evaluate on type level, we just normalize
+normalization is a subset/prestep of full evaluation
+
+on expression level, we want full eager (cbv) eval => values
+
+TODO: where to apply normalization?
+As extra reduction step (+normalized requirement?)? As separate step in between?
+*)
+
+
+(* https://coq.inria.fr/doc/v8.18/refman/language/core/conversion.html *)
+Inductive base_step : expr -> expr -> Prop :=
+(* 'real' steps (congruence steps later) *)
+  | BetaS x T f U elam earg e' :
+  (* TODO: necessary to completely eval T? should probably be *)
+    normalized T ->
+    is_val earg ->
+    e' = subst' x earg elam ->
+    base_step (App (Lam x T f U elam) earg) e'
+  | IotaTupleS es n (i:Fin.t n) e:
+    (* extract from a tuple if all value *)
+    (* needs canonical form lemma for Idx n *)
+    (*
+    for nth, we need a proof about the size
+    alternatively, a vector would work but we would have the size everywhere
+    *)
+    (*
+    TODO: need normalization here?
+    *)
+    Forall is_val es ->
+    length es = n ->
+    nth_error es (` (Fin.to_nat i)) = Some e ->
+    base_step (Extract (Tuple es) (LitIdx n i)) e
+  (* extract of pack *)
+  | IotaPackS x e n ei e':
+    is_val ei -> (* implies ei = LitIdx n i (via canonical values?) *)
+    e' = subst' x ei e ->
+    base_step (Extract (Pack x (LitNat n) e) ei) e'
+  .
+
+
+
+
 (* evaluation contexts for congruence reduction *)
 (* a hole/context is an evaluation point *)
 (*
   one difference is that semantics uses val to restrict the contexts
   to an evaluation from right to left
-  We use additional is_val to restrict the contexts
+  We use additional is_val to restrict the contexts (should be correct here)
 
   only relevant for two sided reductions in app, extract, and tuple
 
@@ -324,7 +424,90 @@ Proof.
   rewrite !fill_comp. by econstructor.
 Qed.
 
-Fixpoint is_closed (X : list string) (e : expr) : bool :=
+(* TODO: we want is_val <-> ~ reducibile *)
+Lemma values_dont_reduce e:
+  is_val e → ¬ reducible e.
+Proof.
+  intros Hv Hred.
+  destruct Hred.
+  destruct H as [K e1 e2 -> -> Hred].
+  induction K;simpl in Hv;inversion Hv;subst;try congruence.
+  all: try (now inversion Hred).
+  - (* Idx #n, Idx -> ... *)
+    destruct K;simpl in *;inversion H0;subst.
+    inversion Hred.
+  - (* Idx #n, #n -> ... *)
+    destruct K;simpl in H2;inversion H2;subst.
+    inversion Hred.
+  - apply Forall_app in H1 as [H1 H2].
+    inversion H2;subst.
+    congruence.
+Qed.
+
+(*
+lemma is_val -> normalized
+equivalent: normalizable -> reducable
+
+TODO: does not hold!
+we normalize under binders but do not reduce under binders
+*)
+(* Lemma normalized_values e:
+  is_val e → normalized e.
+Proof.
+  (* could go the step over 
+    val -> ~red
+    normalizable -> reduce
+   *)
+   intros Hval [e' Hnormstep].
+   inversion Hnormstep;subst.
+   induction K;simpl in *.
+   - inversion H1;subst;admit.
+   - inversion Hval;subst.
+     apply IHK;eauto.
+     eapply Fectx_step with (K:=K);eauto.
+   - 
+
+   dependent induction Hval;simpl in *.
+   - 
+   all: inversion H1;subst.
+   - 
+
+Abort. *)
+
+(* TODO: possibly multiple steps 
+  e.g. <_:n;e>#ei ->n e
+  <_:n;e>#ei 
+    -> <_:vn;e>#ei 
+    -> <_:vn;e>#vi 
+    -> e
+
+  => use progress lemma
+
+  e#0_1 -> e
+  use canonical values => tuple/pack
+*)
+Lemma norm_red e e':
+    normalize_step e e' → base_step e e'.
+Proof.
+  intros Hnorm.
+  inversion Hnorm;subst.
+Abort.
+
+(* TODO: not necessarily: the redex might be under a binder *)
+(* Lemma normalizable_reducible e:
+  normalizable e → reducible e.
+Proof.
+  intros [e' Hnorm].
+  inversion Hnorm;subst.
+  eexists.
+  induction H1.
+Abort. *)
+
+
+
+
+
+(* Fixpoint is_closed (X : list string) (e : expr) : bool :=
   match e with
   | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _ => true
   | Var x => bool_decide (x ∈ X)
@@ -392,7 +575,7 @@ Admitted.
 Lemma subst_is_closed_nil e x es : is_closed [] e → subst x es e = e.
 Proof. intros. apply subst_is_closed with []; set_solver. Qed.
 Lemma subst'_is_closed_nil e x es : is_closed [] e → subst' x es e = e.
-Proof. intros. destruct x as [ | x]. { done. } by apply subst_is_closed_nil. Qed.
+Proof. intros. destruct x as [ | x]. { done. } by apply subst_is_closed_nil. Qed. *)
 
 
 
