@@ -3,7 +3,10 @@
 
   "customizations": {
     "vscode": {
-      "extensions": ["coq-community.vscoq1"]
+      "extensions": [
+       "coq-community.vscoq1",
+       "oijaz.unicode-latex"
+      ]
     }
   }
 }

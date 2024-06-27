@@ -37,7 +37,6 @@ Inductive kind_dominance: list expr -> expr -> Prop :=
 (* where "[ s1 s2 .. sn ] ⇝ s" := (kind_dominance [s1; s2; ..; sn] s). *)
 .
 
-Definition Bool := App Idx 2.
 
 (* TODO: check with page 46 in https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf *)
 
@@ -74,6 +73,11 @@ Fixpoint close_subst_aux (e:expr) (n:nat) (Ts: list ((binder*expr)*Fin.t n))
 Definition close_subst e n Ts :=
   let (idxs,_) := fin_list n in
   close_subst_aux e n (combine Ts idxs).
+
+Definition extracts n e :=
+  let (idxs, _) := fin_list n in
+  map (fun idx => Extract e (LitIdx n idx)) idxs
+  .
 
 
 Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
@@ -204,8 +208,6 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       n = length Ts →
       TY Γ ⊢ ei : (App Idx n) →
       Ts' = close_subst e n Ts →
-      (* TODO: normalize tuple to T (needed for convergence (eventually reach array)) *)
-      (* T = Sigma Ts' -> *)
       normal_eval (Tuple Ts') T →
       TY Γ ⊢ T : s ->
       normal_eval (Extract T ei) U ->
@@ -216,16 +218,24 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
-  | assignable_sigma Γ Ts e:
+  | assignable_sigma Γ n Ts e:
       (* 
         TODO:
         e#in is assignable to T_i under subst for all previous e
       *)
+      n = length Ts ->
+      let Ts' := close_subst e n Ts in
+      (* Note: extracts can not be inlined, it need intransparency *)
+      let es' := extracts n e in
+      Forall2 (type_assignable Γ) Ts' es' ->
       type_assignable Γ (Sigma Ts) e
 where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
 .
 #[export] Hint Constructors syn_typed : core.
+
+
+
 
 (*
 Thoughts on tuple types: do they make sense?
@@ -339,7 +349,81 @@ Proof.
   }
 Admitted. *)
 
-Lemma typed_weakening Γ Δ e A:
+(*
+Derive the mutual induction principles for syn_typed and type_assignable
+*)
+Scheme syn_typed_mut := Induction for syn_typed Sort Prop
+with type_assignable_mut := Induction for type_assignable Sort Prop.
+
+Combined Scheme typed_ind from syn_typed_mut, type_assignable_mut.
+
+Lemma typed_weakening_mut:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+    forall Δ,
+    Γ ⊆ Δ →
+    TY Δ ⊢ e : A) /\
+  (forall Γ A e (H:type_assignable Γ A e),
+    forall Δ,
+    Γ ⊆ Δ →
+    type_assignable Δ A e).
+  (* (TY Γ ⊢ e : A →
+  TY Δ ⊢ e : A) /\
+  (type_assignable Γ A e →
+  type_assignable Δ A e). *)
+Proof.
+  eapply typed_ind with 
+    (P := fun Γ e A H => 
+      forall Δ, Γ ⊆ Δ ->
+      TY Δ ⊢ e : A
+    )
+    (P0 := fun Γ A e H => 
+      forall Δ, Γ ⊆ Δ ->
+      type_assignable Δ A e
+    ).
+  all: intros.
+  all: eauto.
+  - (* var *) 
+    (* intros x A sA Hlookup Hty IH. *)
+    econstructor. 1: by eapply lookup_weaken. apply H. done.
+  - (* pi *) 
+    econstructor; eauto.
+    eapply H0. apply insert_mono. done.
+  - (* lam *) econstructor; eauto using insert_mono.
+  - (* lam anon *)
+    econstructor; eauto.
+  - (* sigma *)
+    econstructor;eauto using insert_mono.
+  - (* Tuple *)
+    econstructor;eauto.
+    admit. (* needs nested induction for sigma *)
+  - (* Array *)
+    econstructor; eauto.
+    apply H0.
+    now apply insert_mono.
+  - (* Pack *)
+    econstructor; eauto.
+    apply H0.
+    now apply insert_mono.
+  - (* assignable *)
+    constructor;eauto.
+  - (* assignable Sigma *)
+    eapply assignable_sigma;first reflexivity.
+    subst. subst Ts' es'.
+    admit. (* needs nested induction *)
+Admitted.
+
+Corollary typed_weakening Γ Δ e A:
+  TY Γ ⊢ e : A →
+  Γ ⊆ Δ →
+  TY Δ ⊢ e : A.
+Proof.
+  destruct typed_weakening_mut.
+  intros.
+  eapply H;eauto.
+Qed.
+
+
+(* Lemma typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
   Γ ⊆ Δ →
   TY Δ ⊢ e : A.
@@ -372,7 +456,7 @@ Proof.
     econstructor; eauto.
     apply IHsyn_typed2.
     now apply insert_mono.
-Admitted.
+Admitted. *)
 
 
 
@@ -562,10 +646,6 @@ Proof.
   subst B : ... is missing => needs hypothesis 
   *)
   dependent induction H;simpl;eauto.
-  (* 
-  TODO: we should probably use the inversion lemmas instead
-  => would probably(?) make induction on statement redundant (but do we have the necessary IHs?)
-  *)
   - (* var *)
     destruct decide;subst.
     + rewrite lookup_insert in H. inversion H;subst. 
@@ -1069,10 +1149,6 @@ Proof.
         apply IotaPackS.
         2: reflexivity.
         assumption.
-        (* 
-        TODO: this case will change with normalization
-        a tuple as well a pack could have array type
-        *)
       * right. destruct H2. eexists. eauto. 
     + right. destruct H1. eexists. eauto. 
   - (* extract tuple (sigma type) *)
@@ -1143,10 +1219,10 @@ Proof.
     + (* named *)
       (* replace (∅) with (subst x1 earg <$> ∅). *)
       simpl.
-      (* TODO: need full TY ... due to fmap value type parameter => use lemma *)
       replace (TY ∅ ⊢ subst x1 earg elam : subst x1 earg U0)
       with (TY subst x1 earg <$> ∅ ⊢ subst x1 earg elam : subst x1 earg U0) by now rewrite fmap_empty.
       eapply typed_substitutivity.
+      (* TODO: need full TY ... due to fmap value type parameter => use lemma *)
       * admit. (* TODO: needs assignable induction *)
       * admit. (* TODO: needs assignable induction *)
     + (* anon *)  
@@ -1174,15 +1250,36 @@ Proof.
     specialize (Forall2_nth_error H2 (` (Fin.to_nat i)) e' H1) as [T' [HnthT' HT']].
     (* 
     we have
+
+    Ts0 ->n Ts
+    Ts  ->n T
     T#i ->n A
-    and e' : T'
-    and nth Ts0 i = T'
+
+    nth es  i = e'
+    es : Ts0
+    (result from this)
+    nth Ts0 i = T'
+    e' : T'
+
+    es#i : A
+
     and want e' : A
-    and Ts0 ->n Ts
+
+    high-level:
+    we extract from a tuple,
+    we know the element in the tuple has some type
+    now the typing rules for the tuple normalized the types
+
+    the evaluation results in projecting one element out
+
+    either:
+    - this element has to be normalized (by the evaluation)
+    - the lemma normalizes the element
+    - normalization does not change the type because it is already a value (and normalized?)
 
     TODO: is there a normalization in the result missing?
      *)
-    admit. (* TODO: need normalization *)
+    admit. 
   - (* Iota Pack *)
     (* Pack: Array *)
     inversion H3;subst.
@@ -1202,8 +1299,8 @@ Proof.
       assumption.
   - (* Iota Pack *)
     (* Pack: Sigma *)
-    (* not possible *)
-    inversion H2.
+    inversion H2;subst.
+    admit.
 Admitted.
 
 
@@ -1234,6 +1331,17 @@ Lemma typed_safety e1 e2 A:
 Proof.
   induction 2; eauto using typed_progress, typed_preservation.
 Qed.
+
+
+
+
+
+
+
+
+
+
+
 
 
 

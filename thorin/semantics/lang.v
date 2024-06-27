@@ -7,6 +7,67 @@ Declare Scope val_scope.
 Delimit Scope expr_scope with E.
 Delimit Scope val_scope with V.
 
+(*
+
+open conceptual TODO:
+- some missing assumptions/mistakes in the pdf
+- is a lam with normalized type also a value or only if the type is evaluated (a value)
+- recheck: normalization is no subset of evaluation (normalization goes under binders)
+  - does normalization go under binder?
+- TODO: how to formalize normalization
+- does order (left-to-right, bottom-up) matter for normalization
+- ----
+- the proof are technically hard:
+  - mutual induction with assignability
+  - nested induction with the lists
+  - normalization in between on type level
+- name clashes for substitutivity
+- is a variable a value? if not, it is not progressing
+- typing does normalization => base step preservation needs to argue that type already normalized or we need to normalize again
+
+
+
+Normalization:
+- pre-requirement for reduction
+- not performed in reduction currently (we always argue about one reduction step)
+  - we can assert normalize before and conceptually normalize afterward
+- currently, 
+
+TODO: characterize normalized
+
+
+
+
+A short outline of the document.
+Each part has its own comments with relevant explanations.
+
+Outline lang.v:
+- expr -- Expression type of thorin
+- is_val
+- subst
+- normalize_step -- a single toplevel normalization step according to ▹
+- full_ectx -- Full contexts going through binders
+- full_contextual_step -- doing a step under a context
+- normal_eval -- predicate to relate an expression to its normal(ized) form
+- base_step -- a single toplevel reduction step
+- ectx -- evaluation contexts for reductino
+- contextual_step -- step under a context
+- contextual_step lemmas -- if subexpression steps, whole expression steps
+
+Outline types_sol.v:
+- syn_typed -- typing derivation, assignability relation
+- typed_weakening -- we can extend the context
+- typed_substitutivity -- subst in context, expression, type
+- canonical value lemma -- if value has some type, it has some shape
+- typed_progress -- typed expressions can reduce or are a value (TODO: needs normalization)
+- typed_preservation_base_step -- a toplevel reduction preserves types
+- typed_preservation -- preservation over multiple steps
+
+*)
+
+
+
+
 Inductive expr :=
   | Star
   | Box
@@ -73,10 +134,8 @@ Inductive is_val : expr → Prop :=
     (* U might depend on x:T *)
     is_val (Lam x T f U e)
   (* compound values *)
-  (* sigma would not be strictly positive
-    => either two lists or use the val type
-
-    however, sigma is like lambda (functions depending on previous values)
+  (* 
+    sigma is like lambda (functions depending on previous values)
     => only the first one should be a val
   *)
   | SigmaEmptyV: is_val (Sigma [])
@@ -197,6 +256,10 @@ Proof.
   now apply map_nth_error.
 Qed.
 
+
+Definition Bool := App Idx (LitNat 2).
+Definition ETrue := LitIdx 2 (Fin.FS Fin.F1).
+
 (* TODO: require normalized subexpressions? (would be needed for in-to-out-order) *)
 Inductive normalize_step : expr -> expr -> Prop :=
   (* no let *)
@@ -224,6 +287,7 @@ Inductive normalize_step : expr -> expr -> Prop :=
     normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T)
   | normalize_beta x T ef U eb ea:
     (* TODO: ef[ea/x] beta equiv true *)
+    ef = ETrue ->
     normalize_step (App (Lam x T ef U eb) ea) (subst' x ea eb)
   | normalize_tuple_pack x n e:
     normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
@@ -305,7 +369,6 @@ As extra reduction step (+normalized requirement?)? As separate step in between?
 Inductive base_step : expr -> expr -> Prop :=
 (* 'real' steps (congruence steps later) *)
   | BetaS x T f U elam earg e' :
-  (* TODO: necessary to completely eval T? should probably be *)
     normalized T ->
     is_val earg ->
     e' = subst' x earg elam ->
