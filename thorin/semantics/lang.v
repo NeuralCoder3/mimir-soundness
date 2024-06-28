@@ -24,6 +24,7 @@ open conceptual TODO:
 - name clashes for substitutivity
 - is a variable a value? if not, it is not progressing
 - typing does normalization => base step preservation needs to argue that type already normalized or we need to normalize again
+- preservation of the form "if typed, then normalized is value or steps"?
 
 
 
@@ -278,9 +279,12 @@ Inductive normalize_step : expr -> expr -> Prop :=
   | normalize_pack_beta en e ei:
     normalize_step (Extract (Pack BAnon en e) ei) e
   | normalize_tuple_eta e n:
+    (* TODO: n>1 missing from paper *)
+    n > 1 ->
     normalize_step (Tuple (map (fun i => Extract e (LitIdx n i)) (ltac: (destruct (fin_list n) as [xs _];exact xs)))) e
   | normalize_pack_tuple n e:
     (* replicate is the same as repeat *)
+    n > 1 ->
     normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
   | normalize_array_sigma n T:
     n > 1 ->
@@ -345,13 +349,182 @@ Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
 Definition normalizable (e : expr) :=
   ∃ e', full_contextual_step e e'.
 
-Definition normalized (e : expr) :=
+Definition normalized_pred (e : expr) :=
   ~ ∃ e', full_contextual_step e e'.
 
   (* maybe as inductive? *)
   (* perform all possible normalization redexes *)
 Definition normal_eval e e' :=
-  rtc full_contextual_step e e' ∧ normalized e'.
+  rtc full_contextual_step e e' ∧ normalized_pred e'.
+
+(*
+  a bit more constructive version
+  => subexpressions and contradict normalization step in negative assumptions
+*)
+Inductive normalized : expr -> Prop :=
+  (* atomic values *)
+  (* conceptually, every value is normalized (not quite -- normalization goes under binders) *)
+  (* but for distinction, differences and adaptation, we should keep normalization without is_val *)
+  | norm_Star: normalized Star
+  | norm_Box: normalized Box
+  | norm_Bot: normalized Bot
+  | norm_Nat: normalized Nat
+  | norm_Idx: normalized Idx
+  | norm_LitNat n: normalized (LitNat n)
+  | norm_LitIdx n i: normalized (LitIdx n i)
+  | norm_Var x: normalized (Var x)
+  (* congruence rules *)
+  | norm_Pi x T U: normalized T -> normalized U -> normalized (Pi x T U)
+  | norm_Lam x T f U e: normalized T -> normalized f -> normalized U -> normalized e -> normalized (Lam x T f U e)
+
+  (*
+    App
+    - subexpressions normalized 
+    - not beta redex with true filter
+  *)
+  | norm_App e1 e2:
+    normalized e1 -> normalized e2 -> 
+    (* TODO: not = ETrue but beta equiv to True *)
+    ~(exists x T f U e, e1 = Lam x T f U e /\ f = ETrue) ->
+    normalized (App e1 e2)
+
+  (*
+    Sigma
+    - subexpressions normalized
+    - not unary
+    - no unnamed array sigma [T, ..., T]
+  *)
+  | norm_Sigma xs:
+    (* without map separately, it would be a not strictly positive occurence of normalized *)
+    Forall normalized (map (fun '(x,T) => T) xs) ->
+    xs = [] \/ length xs > 1 ->
+    ~ (length xs > 1 /\ exists T, Forall (fun b => b = (BAnon, T)) xs) ->
+    normalized (Sigma xs)
+
+  (* Tuple
+    - subexpressions normalized 
+    - not unary 
+    - not eta tuple (e#i, i in 0..n-1) 
+    - not pack tuple (e, ..., e) 
+  *)
+  | norm_Tuple es:
+    Forall normalized es ->
+    es = [] \/ length es > 1 ->
+    ~ (length es > 1 /\ 
+      exists e, 
+        Forall2 (fun ei idx => ei = Extract e (LitIdx (length es) idx))
+          es (let (xs,_) := fin_list (length es) in xs)
+    ) ->
+    ~ (length es > 1 /\ exists e, es = replicate (length es) e) ->
+    normalized (Tuple es)
+
+  (*
+    Array
+    - subexpressions normalized
+    - no named & nat size
+  *)
+  | norm_Array x en T:
+    normalized en -> normalized T -> 
+    ~ (exists s n, x = BNamed s /\ en = LitNat n) ->
+    normalized (Array x en T)
+
+  (*
+    Pack
+    - subexpressions normalized
+    - no named & nat size
+  *)
+  | norm_Pack x en e:
+    normalized en -> normalized e -> 
+    ~ (exists s n, x = BNamed s /\ en = LitNat n) ->
+    normalized (Pack x en e)
+
+  (*
+    Extract
+    - subexpressions normalized
+    - no extract 0_1
+    - no extract of tuple with idx
+    - no extract of unnamed pack
+  *)
+  | norm_Extract e ei:
+    normalized e -> normalized ei -> 
+    ~ (ei = LitIdx 1 Fin.F1) ->
+    ~ (exists es idx, e = Tuple es /\ ei = LitIdx (length es) idx) ->
+    ~ (exists en e, e = Pack BAnon en e) ->
+    normalized (Extract e ei)
+  .
+
+Lemma normalized_sound e:
+  (* normalized_pred := ~ normalizable *)
+  normalized e -> ~ normalizable e.
+Proof.
+  induction 1;intros [e' Hnorm].
+  - (* Star *)
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H;subst.
+    inversion H1.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - (* Pi *)
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H1;subst.
+    + inversion H3. (* Pi does not make a norm step *)
+    + contradict IHnormalized1.
+      eexists.
+      econstructor;eauto.
+    + contradict IHnormalized2.
+      eexists.
+      econstructor;eauto.
+  - admit.
+  - (* App *)
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H2;subst.
+    + inversion H4;subst.
+      contradict H1.
+      do 5 eexists;eauto.
+    + contradict IHnormalized1.
+      eexists.
+      econstructor;eauto.
+    + contradict IHnormalized2.
+      eexists.
+      econstructor;eauto.
+  - (* Sigma *)
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H2;subst.
+    + inversion H4;subst.
+      * (* unary Sigma *)
+        simpl in H0.
+        destruct H0;try congruence.
+        lia.
+      * (* replicate *)
+        contradict H1.
+        split.
+        -- now rewrite replicate_length.
+        -- exists T. admit. (* easy *)
+    + admit. (* needs nested induction *)
+  - (* Tuple *)
+    admit.
+  - (* Array *)
+    admit.
+  - (* Pack *)
+    admit.
+  - (* Extract *) 
+    admit.
+Admitted.
+
+
+
+
+
+
+
+
+
+
 
 
 (*

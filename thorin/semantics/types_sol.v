@@ -1052,51 +1052,50 @@ e is a value or
 exists e' s.t. e -> e'
 *)
 
-Lemma typed_progress e A:
+Lemma typed_progress_mut:
   (* everything except var works out with Γ instead of ∅ *)
-  TY ∅ ⊢ e : A →
-  (* TODO: do we need an is_val of A? *)
-  is_val e ∨ reducible e.
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+    Γ = ∅ ->
+    is_val e ∨ reducible e) /\
+  (forall Γ A e (H:type_assignable Γ A e),
+    Γ = ∅ ->
+    is_val e ∨ reducible e).
 Proof.
-  intros H.
-  dependent induction H;eauto 10 using is_val.
+  eapply typed_ind;intros;subst;eauto 10 using is_val.
+  - (* var *)
+    inversion e.
   - (* pi *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + destruct H2. right. eexists. 
+    + destruct H. right. eexists. 
       eauto. (* uses contextual step lemmas *)
   - (* pi anon *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + destruct H2. right. eexists. 
+    + destruct H. right. eexists. 
       eauto.
   - (* lambda *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + destruct H3. right. eexists. 
+    + destruct H. right. eexists. 
       eauto. (* uses contextual step lemmas *)
   - (* lambda anon -- same as named *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + destruct H3. right. eexists. eauto. 
+    + destruct H. right. eexists. eauto. 
   - (* app *)
-    destruct IHsyn_typed;eauto.
-    + (* TODO: need assignable induction *)
-      (* idea would be:
-      either eT is not a value => do contextual step
-      otherwise, use base step
-      *)
-      assert (is_val eT ∨ reducible eT) as [HvalT|HredT] by admit.
-      * specialize (canonical_value_pi _ _ _ _ _ H H1) as [(->&->&->&->)|(f&ef&(->&HvT))].
+    destruct H;eauto.
+    + destruct H0 as [HvalT|HredT];eauto.
+      * specialize (canonical_value_pi _ _ _ _ _ s H) as [(->&->&->&->)|(f&ef&(->&HvT))].
         -- (* canonical value Idx *)
           left.
+          inversion t;subst.
           (* from type_assignable, we get
-            eT: Nat
+            eT: Nat (by inversion on eT is Nat assignable)
             from there and canonical value, eT = LitNat n
             hence, IdxAppV applies
           *)
-          inversion H0;subst.
-          specialize (canonical_value_nat _ _ H2 HvalT) as [n ->].
+          specialize (canonical_value_nat _ _ H0 HvalT) as [n ->].
           now constructor.
         -- right. 
           (* e: Pi x T U /\ is_val e => canonical form *)
@@ -1106,84 +1105,115 @@ Proof.
           admit. (* here, we are in lambda app, where left are values
             but we need normalized =>
             TODO: lemma needs to talk about normalization (either it is normalized or normalization possible)
+
+            we have:
+            is_val T
+            is_val eT
+
+            ⊢ λ (x:T) : U, ef : Pi x T U
+
+            we want normalized T
            *)
       * right. destruct HredT. eexists. eauto. 
-    + right. destruct H1. eexists. eauto. 
+    + right. destruct H. eexists. eauto. 
   - (* sigma cons *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + (* we only perform head reduction at sigma => rest not relevant *)
       left. now constructor.
-    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
+    + right. destruct H. eexists. eauto. (* contextual step lemma *)
   - (* sigma anon cons -- identical to sigma cons *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
+    + right. destruct H. eexists. eauto. (* contextual step lemma *)
   - (* tuple *)
     admit. (* missing nested induction *)
   - (* array *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + (* T is not reduced as it (might) depend on x *)
       left. now constructor.
-    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
+    + right. destruct H. eexists. eauto. (* contextual step lemma *)
   - (* array anon -- identical to array *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
+    + right. destruct H. eexists. eauto. (* contextual step lemma *)
   - (* pack *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + right. destruct H1. 
-      destruct H2. 
-      (* somehow eauto does not solve this *)
-      eexists. 
-      eapply contextual_step_pack.
-      apply H2.
+    + right. destruct H. 
+      eexists. eauto.
   - (* pack anon -- identical to pack *)
-    destruct IHsyn_typed1;eauto.
+    destruct H;eauto.
     + left. now constructor.
-    + right. destruct H1. eexists. eauto. (* contextual step lemma *)
+    + right. destruct H. eexists. eauto. (* contextual step lemma *)
   - (* extract array *)
-    destruct IHsyn_typed1;eauto.
-    + destruct IHsyn_typed2;eauto.
+    destruct H;eauto.
+    + destruct H0;eauto.
       * right.
-        pose proof (canonical_value_array _ _ _ _ _ H H1) as [eb (->&Hvalen&Htyen&Htyeb)].
+        pose proof (canonical_value_array _ _ _ _ _ s H) as [eb (->&Hvalen&Htyen&Htyeb)].
         (* from array, we get that en is a value from there, we get the idx value *)
         pose proof (canonical_value_nat _ _ Htyen Hvalen) as [n ->].
-        pose proof (canonical_value_idx _ _ _ H0 H2) as [i ->].
+        pose proof (canonical_value_idx _ _ _ s0 H0) as [i ->].
         eexists.
         apply base_contextual_step.
         apply IotaPackS.
         2: reflexivity.
         assumption.
-      * right. destruct H2. eexists. eauto. 
-    + right. destruct H1. eexists. eauto. 
+      * right. destruct H0. eexists. eauto. 
+    + right. destruct H. eexists. eauto. 
   - (* extract tuple (sigma type) *)
     subst;simpl.
-    destruct IHsyn_typed1;eauto.
-    + destruct IHsyn_typed2;eauto.
+    destruct H;eauto.
+    + destruct H0;eauto.
       * right.
-        pose proof (canonical_value_idx _ _ _ H1 H2) as [i ->].
-        pose proof (canonical_value_sigma _ _ _ H H0) as [[es (->&Hval&Hlen)]|].
+        pose proof (canonical_value_idx _ _ _ s1 H0) as [i ->].
+        pose proof (canonical_value_sigma _ _ _ s0 H) as [[es (->&Hval&Hlen)]|].
         -- (* a tuple as expected *)
           pose proof (nth_fin _ es).
-          rewrite Hlen in H6; specialize (H6 i); destruct H6.
+          rewrite Hlen in H2; specialize (H2 i); destruct H2.
           eexists.
           apply base_contextual_step.
           (* IotaTupleS -- we know that e has to be a tuple as a pack will always have array type *)
           apply IotaTupleS.
           ++ assumption.
           ++ assumption.
-          ++ apply H6.
-        -- destruct H6 as (x&eb&->).
+          ++ apply H2.
+        -- destruct H2 as (x&eb&->).
           (* a pack instead that was normalized *)
           eexists.
           apply base_contextual_step.
           apply IotaPackS;eauto.
-      * right. destruct H2. eexists. eauto. 
-    + right. destruct H0. eexists. eauto.
+      * right. destruct H0. eexists. eauto. 
+    + right. destruct H. eexists. eauto.
+  - (* type assignable sigma *)
+    subst Ts' es'.
+    admit. (* needs nested induction *)
+    (* and type assignable inversion lemma? 
+      we have 
+        type_assignable ∅ (Ti[...]) (ei#i)
+      by induction, we get
+        is_val ei#i  or reducible ei#i
+      (which is reducible for all because a projection is never a value)
+      giving us nothing for e
+
+      TODO:
+      should we speak about normalization here?
+        normalized e 
+      is not enough, because we have the problem with the unreduced assignable cases
+      => maybe reformulate as
+      type_assignable Γ A e ->
+      normalized e e' ->
+      is_val e' ∨ reducible e'
+    *)
 Admitted.
 
 
+Corollary typed_progress e A:
+  (* everything except var works out with Γ instead of ∅ *)
+  TY ∅ ⊢ e : A →
+  is_val e ∨ reducible e.
+Proof.
+  edestruct typed_progress_mut as [H _];eauto.
+Qed.
 
 
 
@@ -1232,11 +1262,21 @@ Proof.
       with (TY subst x1 earg <$> ∅ ⊢ subst x1 earg elam : subst x1 earg U0) by now rewrite fmap_empty.
       eapply typed_substitutivity.
       (* TODO: need full TY ... due to fmap value type parameter => use lemma *)
-      * admit. (* TODO: needs assignable induction *)
-      * admit. (* TODO: needs assignable induction *)
+      * admit. 
+      * admit. 
+      (*
+      TODO: 
+        we know earg is assignable to T0
+        and elam is under x1:T0 assignable to U0
+
+        wa want 
+        elam [earg/x1] : U0 [earg/x1]
+
+        => subst lemma for assignable
+      *)
     + (* anon *)  
       simpl in *. (* remove all subst *)
-      admit. (* TODO: needs assignable induction *)
+      admit. (* TODO: needs assignable induction? here, elam is assignable T0 *)
   - (* Iota Tuple *)
     (* Tuple: Array *)
 
@@ -1309,6 +1349,13 @@ Proof.
   - (* Iota Pack *)
     (* Pack: Sigma *)
     inversion H2;subst.
+    (*
+      Ts -> close subst -> T -> extract -> A
+
+      TODO: why does this hold?
+      e0 should be subst invariant under the type named binders
+      => subst lemma
+    *)
     admit.
 Admitted.
 
