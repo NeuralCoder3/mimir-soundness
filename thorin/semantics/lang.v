@@ -695,7 +695,38 @@ Proof.
   by apply (fill_contextual_step (AppRCtx e1 HoleCtx H)).
 Qed.
 
-(* TODO: complete other lemmata about contextual steps *)
+Lemma contextual_step_sigma x T T' xs:
+  contextual_step T T' →
+  contextual_step (Sigma ((x, T) :: xs)) (Sigma ((x, T') :: xs)).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (SigmaCtx x HoleCtx xs)).
+Qed.
+
+Lemma contextual_step_tuple es es' e e':
+  Forall is_val es →
+  contextual_step e e' →
+  contextual_step (Tuple (es ++ e :: es')) (Tuple (es ++ e' :: es')).
+Proof.
+  intros Hval Hcontextual.
+  by apply (fill_contextual_step (TupleCtx es HoleCtx es' Hval)).
+Qed.
+
+Lemma contextual_step_array x en en' T:
+  contextual_step en en' →
+  contextual_step (Array x en T) (Array x en' T).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (ArrayCtx x HoleCtx T)).
+Qed.
+
+Lemma contextual_step_pack x en en' e:
+  contextual_step en en' →
+  contextual_step (Pack x en e) (Pack x en' e).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (PackCtx x HoleCtx e)).
+Qed.
 
 Lemma contextual_step_extract_l e e' ei:
   contextual_step e e' →
@@ -720,7 +751,10 @@ Hint Resolve
   contextual_step_lam
   contextual_step_app_l
   contextual_step_app_r
-  (* ... *)
+  contextual_step_sigma
+  contextual_step_tuple
+  contextual_step_array
+  contextual_step_pack
   contextual_step_extract_l
   contextual_step_extract_r
   : core.

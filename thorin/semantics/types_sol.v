@@ -1042,6 +1042,8 @@ Admitted.
 
 
 
+
+
 (*
 Progress 
 |- e : A
@@ -1049,37 +1051,36 @@ Progress
 e is a value or
 exists e' s.t. e -> e'
 *)
-Lemma typed_progress Γ e A:
-  (* TY ∅ ⊢ e : A → *)
-  TY Γ ⊢ e : A →
+
+Lemma typed_progress e A:
+  (* everything except var works out with Γ instead of ∅ *)
+  TY ∅ ⊢ e : A →
   (* TODO: do we need an is_val of A? *)
   is_val e ∨ reducible e.
 Proof.
   intros H.
-  (* remember ∅ as Γ. *)
   dependent induction H;eauto 10 using is_val.
-  - admit. (* TODO: var *)
   - (* pi *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
     + destruct H2. right. eexists. 
       eauto. (* uses contextual step lemmas *)
   - (* pi anon *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
     + destruct H2. right. eexists. 
       eauto.
   - (* lambda *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
     + destruct H3. right. eexists. 
       eauto. (* uses contextual step lemmas *)
   - (* lambda anon -- same as named *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
     + destruct H3. right. eexists. eauto. 
   - (* app *)
-    destruct IHsyn_typed.
+    destruct IHsyn_typed;eauto.
     + (* TODO: need assignable induction *)
       (* idea would be:
       either eT is not a value => do contextual step
@@ -1109,36 +1110,41 @@ Proof.
       * right. destruct HredT. eexists. eauto. 
     + right. destruct H1. eexists. eauto. 
   - (* sigma cons *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + (* we only perform head reduction at sigma => rest not relevant *)
       left. now constructor.
-    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
   - (* sigma anon cons -- identical to sigma cons *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
-    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
   - (* tuple *)
     admit. (* missing nested induction *)
   - (* array *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + (* T is not reduced as it (might) depend on x *)
       left. now constructor.
-    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
   - (* array anon -- identical to array *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
-    + right. destruct H2. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H2. eexists. eauto. (* contextual step lemma *)
   - (* pack *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
-    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H1. 
+      destruct H2. 
+      (* somehow eauto does not solve this *)
+      eexists. 
+      eapply contextual_step_pack.
+      apply H2.
   - (* pack anon -- identical to pack *)
-    destruct IHsyn_typed1.
+    destruct IHsyn_typed1;eauto.
     + left. now constructor.
-    + right. destruct H1. eexists. eauto. admit. (* contextual step lemma *)
+    + right. destruct H1. eexists. eauto. (* contextual step lemma *)
   - (* extract array *)
-    destruct IHsyn_typed1.
-    + destruct IHsyn_typed2.
+    destruct IHsyn_typed1;eauto.
+    + destruct IHsyn_typed2;eauto.
       * right.
         pose proof (canonical_value_array _ _ _ _ _ H H1) as [eb (->&Hvalen&Htyen&Htyeb)].
         (* from array, we get that en is a value from there, we get the idx value *)
@@ -1153,8 +1159,8 @@ Proof.
     + right. destruct H1. eexists. eauto. 
   - (* extract tuple (sigma type) *)
     subst;simpl.
-    destruct IHsyn_typed1.
-    + destruct IHsyn_typed2.
+    destruct IHsyn_typed1;eauto.
+    + destruct IHsyn_typed2;eauto.
       * right.
         pose proof (canonical_value_idx _ _ _ H1 H2) as [i ->].
         pose proof (canonical_value_sigma _ _ _ H H0) as [[es (->&Hval&Hlen)]|].
@@ -1176,6 +1182,9 @@ Proof.
       * right. destruct H2. eexists. eauto. 
     + right. destruct H0. eexists. eauto.
 Admitted.
+
+
+
 
 
 
