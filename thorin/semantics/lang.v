@@ -325,20 +325,20 @@ Fixpoint full_fill (K:full_ectx) (e:expr) : expr :=
   | FHoleCtx => e
   | FPi1 x K U => Pi x (full_fill K e) U
   | FPi2 x T K => Pi x T (full_fill K e)
-  | FLam1 x K f U e => Lam x (full_fill K e) f U e
-  | FLam2 x T K U e => Lam x T (full_fill K e) U e
-  | FLam3 x T f K e => Lam x T f (full_fill K e) e
-  | FLam4 x T f U K => Lam x T f U (full_fill K e)
+  | FLam1 x K f U eb => Lam x (full_fill K e) f U eb
+  | FLam2 x T K U eb => Lam x T (full_fill K e) U eb
+  | FLam3 x T f K eb => Lam x T f (full_fill K e) eb
+  | FLam4 x T f U K  => Lam x T f U (full_fill K e)
   | FApp1 K e2 => App (full_fill K e) e2
   | FApp2 e1 K => App e1 (full_fill K e)
   | FSigma xs1 x K xs2 => Sigma (xs1 ++ (x,full_fill K e) :: xs2)
   | FTuple es1 K es2 => Tuple (es1 ++ full_fill K e :: es2)
   | FArray1 x K T => Array x (full_fill K e) T
   | FArray2 x en K => Array x en (full_fill K e)
-  | FPack1 x K e => Pack x (full_fill K e) e
+  | FPack1 x K eb => Pack x (full_fill K e) eb
   | FPack2 x en K => Pack x en (full_fill K e)
   | FExtract1 K ei => Extract (full_fill K e) ei
-  | FExtract2 e K => Extract e (full_fill K e)
+  | FExtract2 eb K => Extract eb (full_fill K e)
   end.
 
 Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
@@ -449,7 +449,7 @@ Inductive normalized : expr -> Prop :=
     normalized e -> normalized ei -> 
     ~ (ei = LitIdx 1 Fin.F1) ->
     ~ (exists es idx, e = Tuple es /\ ei = LitIdx (length es) idx) ->
-    ~ (exists en e, e = Pack BAnon en e) ->
+    ~ (exists en eb, e = Pack BAnon en eb) ->
     normalized (Extract e ei)
   .
 
@@ -458,17 +458,31 @@ Lemma normalized_sound e:
   normalized e -> ~ normalizable e.
 Proof.
   induction 1;intros [e' Hnorm].
+  1-8: (
+    destruct Hnorm;subst;
+    destruct K;simpl in *;inversion H;subst;
+    inversion H1
+  ).
+  (* 
   - (* Star *)
     destruct Hnorm;subst.
     destruct K;simpl in *;inversion H;subst.
     inversion H1.
+  *)
+  (* - admit.
   - admit.
   - admit.
   - admit.
   - admit.
   - admit.
-  - admit.
-  - admit.
+  - admit. *)
+  (*
+    we look at the normalization step and context
+    => is the context toplevel or a subexpression
+    for toplevel: which normalization step
+      each normalization step contradicted by assumption
+    each subexpression contradiction
+  *)
   - (* Pi *)
     destruct Hnorm;subst.
     destruct K;simpl in *;inversion H1;subst.
@@ -479,7 +493,14 @@ Proof.
     + contradict IHnormalized2.
       eexists.
       econstructor;eauto.
-  - admit.
+  - (* Lam -- similar to Pi *)
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H3;subst.
+    + inversion H5.
+    + contradict IHnormalized1;eexists;econstructor;eauto.
+    + contradict IHnormalized2;eexists;econstructor;eauto.
+    + contradict IHnormalized3;eexists;econstructor;eauto.
+    + contradict IHnormalized4;eexists;econstructor;eauto.
   - (* App *)
     destruct Hnorm;subst.
     destruct K;simpl in *;inversion H2;subst.
@@ -507,13 +528,40 @@ Proof.
         -- exists T. admit. (* easy *)
     + admit. (* needs nested induction *)
   - (* Tuple *)
-    admit.
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H3;subst.
+    + inversion H5;subst.
+      * destruct H0;eauto. inversion H0.
+      * contradict H1.
+        admit.
+      * contradict H2. split.
+        -- now rewrite replicate_length.
+        -- eexists. admit. (* TODO: correspondence n and length missing *)
+    + admit. (* needs nested induction *)
   - (* Array *)
-    admit.
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H2;subst.
+    + inversion H4;subst.
+      contradict H1.
+      eauto.
+    + contradict IHnormalized1;eexists;econstructor;eauto.
+    + contradict IHnormalized2;eexists;econstructor;eauto.
   - (* Pack *)
-    admit.
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H2;subst.
+    + inversion H4;subst.
+      contradict H1. eauto.
+    + contradict IHnormalized1;eexists;econstructor;eauto.
+    + contradict IHnormalized2;eexists;econstructor;eauto.
   - (* Extract *) 
-    admit.
+    destruct Hnorm;subst.
+    destruct K;simpl in *;inversion H4;subst.
+    + inversion H6;subst.
+      * now contradict H1.
+      * contradict H2. eauto.
+      * contradict H3. eauto.
+    + contradict IHnormalized1;eexists;econstructor;eauto.
+    + contradict IHnormalized2;eexists;econstructor;eauto.
 Admitted.
 
 
