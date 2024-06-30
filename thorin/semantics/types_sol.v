@@ -1378,6 +1378,98 @@ Lemma typed_preservation e e' A:
   contextual_step e e' →
   TY ∅ ⊢ e' : A.
 Proof.
+  intros Hty Hstep. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  dependent induction Hty;eauto.
+  all: destruct K;simpl in *;try congruence;subst.
+  all: try now inversion Hstep.
+  all: try inversion x;subst.
+  - (* pi named *)
+    eapply typed_pi;eauto.
+    admit. (* step in context *)
+  - (* pi anon *)
+    admit.
+  - (* lambda named *)
+    (* the type is normalized *)
+    (*
+      TODO: new insight => see head in lang
+    *)
+
+
+    eapply beta_typed.
+    2: eapply Ectx_step with (K:=PiCtx x0 K U0);eauto.
+    simpl.
+    eapply beta_typed_lam;eauto.
+    + admit. (* step in context *)
+    + admit. (* step in context *)
+    + admit. (* step in context in assignable *)
+  - (* lambda anon *)
+    admit.
+  - (* hole context, toplevel reduction app *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eapply beta_typed_app;eauto.
+  - (* app left *)
+    eapply beta_typed_app;eauto.
+  - (* app right *)
+    eapply beta_typed.
+    2: admit. (* context under subst *)
+    eapply beta_typed_app;eauto. 
+    admit. (* assignable *)
+  - (* sigma cons *)
+    eapply beta_typed_sigma_cons;eauto.
+    admit. (* step in context *)
+  - (* sigma anon cons *)
+    admit.
+  - (* Tuple *)
+    eapply beta_typed_tuple;eauto.
+    apply list.Forall2_app_inv_l in H as (Ts1&Ts2&HTs1&HTs2&->).
+    apply list.Forall2_app_inv_l.
+    exists Ts1,Ts2;repeat split;auto.
+    inversion HTs2;subst.
+    constructor;auto.
+    admit. (* nested induction *)
+  - (* array *)
+    eapply beta_typed_arr;eauto.
+    admit. (* step in context *)
+  - (* array anon *)
+    admit.
+  - (* pack *)
+    eapply beta_typed.
+    2: eapply Ectx_step with (K:=ArrayCtx x0 K T);eauto.
+    simpl.
+    eapply beta_typed_pack;eauto.
+    admit. (* step in context *)
+  - (* pack anon *)
+    admit.
+  - (* hole context, toplevel reduction extract array *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eauto.
+  - (* extract array, step array *)
+    eapply beta_typed_extract_array;eauto.
+  - (* extract array, step index *)
+    eapply beta_typed.
+    2: admit. (* context under subst *)
+    eapply beta_typed_extract_array;eauto.
+  - (* hole context, toplevel reduction extract tuple *)
+    eapply typed_preservation_base_step_beta.
+    2: eassumption.
+    eauto.
+  - (* extract tuple, step tuple *)
+    eapply beta_typed_extract_tuple;eauto.
+  - (* extract tuple, step index *)
+    eapply beta_typed.
+    1: eapply beta_typed_extract_tuple;eauto.
+    assert (is_val (Sigma Ts)) by admit.
+    eapply Ectx_step with (K:=ExtractRCtx (Sigma Ts) K H0);eauto.
+
+
+  intros Hty Hstep.
+  destruct Hstep as [K eK eK' He He' Hstep].
+  induction Hty;inversion K;simpl in *;inversion He;inversion He'.
+  all: try eauto.
+  - 
 Admitted.
 
 Lemma typed_safety e1 e2 A:

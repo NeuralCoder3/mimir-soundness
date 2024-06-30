@@ -34,7 +34,23 @@ Normalization:
   - we can assert normalize before and conceptually normalize afterward
 - currently, 
 
-TODO: characterize normalized
+
+λ (x:T) : U @ef, eb
+we do not reduce under binders => only redex is T
+we use λ in app if T is normalized
+=> TODO: is_val should be true if T is normalized
+hence, we conceptually (and practically) only reduce until T is normalized
+but by construction, T is normalized
+=> TODO: a few consequences
+- on type level, normalization is our value relation
+- is_val should rely on normalized
+- relation to beta
+  - (without norm as pre-op, norm should not go under binders)
+  - 'beta reduce until norm' does not really hold (and if so only if not under binder)
+- TODO: there should not be any type reduxes (except maybe toplevel?)
+  - no redex in the type of a lambda
+  - can Pi have a redex => should have, right?
+
 
 
 
@@ -535,8 +551,8 @@ Proof.
       * contradict H1.
         admit.
       * contradict H2. split.
-        -- now rewrite replicate_length.
-        -- eexists. admit. (* TODO: correspondence n and length missing *)
+        -- rewrite replicate_length. easy.
+        -- rewrite replicate_length. eauto.
     + admit. (* needs nested induction *)
   - (* Array *)
     destruct Hnorm;subst.
