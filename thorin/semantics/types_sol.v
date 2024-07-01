@@ -139,7 +139,7 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ U : sU →
       TY Γ ⊢ ef : Bool →
       (* ignore x *)
-      type_assignable Γ T e →
+      type_assignable Γ U e →
       TY Γ ⊢ (Lam BAnon T ef U e) : (Pi BAnon T U)
     | typed_app Γ e eT x T U:
       (* handles both named and unnamed *)
@@ -1237,6 +1237,127 @@ Proof.
 Qed.
 Arguments Forall2_nth_error {_ _ _ _ _}.
 
+
+
+Lemma typed_preservation_normal_step e e' A:
+  TY ∅ ⊢ e : A →
+  normalize_step e e' →
+  exists A', TY ∅ ⊢ e' : A'.
+(* and A' is normalize_reachable from A *)
+Proof.
+  intros Hty Hstep.
+  induction Hstep in A, Hty |- *.
+  all: inversion Hty;subst.
+  - eexists;eauto.
+  - eexists;eauto.
+  - inversion H0;subst.
+    eexists;eauto.
+  - eexists. econstructor;eauto.
+  - eexists. econstructor;eauto.
+  - inversion H4;subst.
+    specialize (Forall2_nth_error H1 _ _ H0) as [Ti [HTi Htyi]].
+    (* TODO: do we need something about the normal_eval? *)
+    eexists. eauto.
+  - inversion H3;subst.
+    specialize (Forall2_nth_error H1 _ _ H0) as [Ti [HTi Htyi]].
+    (* TODO: do we need something about the normal_eval? *)
+    eexists. eauto.
+  - inversion H2;subst.
+    eexists. eauto.
+  - inversion H1.
+  - (* eta tuple case *)
+    eexists.
+    admit.
+    (* TODO: needs lemma that something has Sigma-like type (or at least a type for now), if each extract is typed *)
+  - inversion H1;subst.
+    + destruct n;simpl in *;[lia|congruence].
+    + destruct n;try lia;simpl in *.
+      inversion H0;subst.
+      (* or inversion H1;subst. *)
+      eexists. econstructor;eauto.
+  - destruct n;simpl in *;[lia|congruence]. (* TODO: why is this contradictory *)
+  - destruct n;simpl in *;try lia.
+    inversion H0;subst. (* TODO: why is this contradictory *)
+  - destruct n;simpl in *;try lia.
+    inversion H0;subst.
+    eexists. econstructor;eauto.
+    inversion H4;subst;firstorder.
+  - inversion H3;subst.
+  (*
+  assignable => has some (similar) type (not necessarily normal-equivalent)
+  
+  *)
+    + admit. (* subst with assignable? *)
+    + simpl. admit. (* same but simpler *)
+  - eexists. econstructor.
+    all: admit. (* if typed with context => instantiate typed *)
+  - admit. (* if typed with context => instantiate typed *)
+Admitted.
+
+
+Lemma typed_preservation_normal_eval e e' A A':
+  TY ∅ ⊢ e : A →
+  normal_eval e e' →
+  (* normalize_step e e' → *)
+  normal_eval A A' →
+  (* normalize_step A A' → *)
+  TY ∅ ⊢ e' : A'.
+Proof.
+  intros Hty HstepE HstepA.
+  destruct HstepE as [HstepE HnormE].
+  destruct HstepA as [HstepA HnormA].
+  unfold normalized_pred in *.
+  induction HstepE in A,A', Hty, HstepA, HnormA |- *.
+  - admit.
+  - eapply IHHstepE.
+    3: apply HnormA.
+    + clear e' z HstepE HnormE IHHstepE.
+      (*
+        e has some A'' s.t. A ->n A''
+      *)
+      admit.
+    (* + clear IHrtc. *)
+      (* clear H0 H3. *)
+    + 
+      (* 
+        A'' ->n A'
+        by A ->n A''
+        and confluence/church-rosser we know that A'' ->n A'
+      *)
+      admit.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 (* Lemma typed_preservation_base_step e e' A:
   TY 0; ∅ ⊢ e : A →
   base_step e e' →
@@ -1261,7 +1382,9 @@ Proof.
       replace (TY ∅ ⊢ subst x1 earg elam : subst x1 earg U0)
       with (TY subst x1 earg <$> ∅ ⊢ subst x1 earg elam : subst x1 earg U0) by now rewrite fmap_empty.
       eapply typed_substitutivity.
-      (* TODO: need full TY ... due to fmap value type parameter => use lemma *)
+      (* TODO: need full TY ... due to fmap value type parameter => use lemma 
+        see lemma below
+      *)
       * admit. 
       * admit. 
       (*
@@ -1273,10 +1396,11 @@ Proof.
         elam [earg/x1] : U0 [earg/x1]
 
         => subst lemma for assignable
+        or assignable => typed
       *)
     + (* anon *)  
       simpl in *. (* remove all subst *)
-      admit. (* TODO: needs assignable induction? here, elam is assignable T0 *)
+      admit. (* TODO: needs assignable induction? here, elam is assignable T0 -- see above *)
   - (* Iota Tuple *)
     (* Tuple: Array *)
 

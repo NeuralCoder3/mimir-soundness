@@ -49,6 +49,7 @@ but by construction, T is normalized
   - 'beta reduce until norm' does not really hold (and if so only if not under binder)
 - TODO: there should not be any type reduxes (except maybe toplevel?)
   - no redex in the type of a lambda
+  - same with sigma
   - can Pi have a redex => should have, right?
 
 
@@ -132,40 +133,6 @@ Bind Scope expr_scope with expr.
   To me, a inductive predicate is_val seems to be shorter and simpler.
   All our proofs only argue about is_val.
 *)
-
-Inductive is_val : expr → Prop :=
-  | StarV : is_val Star
-  | BoxV : is_val Box
-  | BotV : is_val Bot
-  | NatV : is_val Nat
-  | IdxV : is_val Idx
-  (* TODO: is (Idx n) a value? if not what does it reduce to *)
-  | IdxAppV n : is_val (App Idx (LitNat n))
-  | LitNatV n : is_val (LitNat n)
-  | LitIdxV n i : is_val (LitIdx n i)
-  | PiV x T U : 
-    is_val T →
-    is_val (Pi x T U)
-  | LamV x T f U e : 
-    is_val T →
-    (* U might depend on x:T *)
-    is_val (Lam x T f U e)
-  (* compound values *)
-  (* 
-    sigma is like lambda (functions depending on previous values)
-    => only the first one should be a val
-  *)
-  | SigmaEmptyV: is_val (Sigma [])
-  (* we do not need to test the rest => (implicitely) depends on first one *)
-  | SigmaConsV x T args : is_val T → is_val (Sigma ((x, T) :: args))
-  | TupleV es : Forall is_val es → is_val (Tuple es)
-  | ArrayV x en T : 
-    is_val en →
-    is_val (Array x en T)
-  | PackV x en e :
-    is_val en →
-    is_val (Pack x en e)
-  .
 
 Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
   let recurse_under y expr := if decide (y = BNamed x) then expr else subst x es expr in
@@ -468,6 +435,55 @@ Inductive normalized : expr -> Prop :=
     ~ (exists en eb, e = Pack BAnon en eb) ->
     normalized (Extract e ei)
   .
+(* TODO:
+  enumerate full constructive (as far as possible) normalized predicate
+*)
+Inductive is_val : expr → Prop :=
+(* with is_val : expr → Prop := *)
+  (* atomic values *)
+  | StarV : is_val Star
+  | BoxV : is_val Box
+  | BotV : is_val Bot
+  | NatV : is_val Nat
+  | IdxV : is_val Idx
+  (* TODO: is (Idx n) a value? if not what does it reduce to *)
+  | IdxAppV n : is_val (App Idx (LitNat n))
+  | LitNatV n : is_val (LitNat n)
+  | LitIdxV n i : is_val (LitIdx n i)
+  | PiV x T U : 
+    is_val T →
+    is_val (Pi x T U)
+  | LamV x T f U e : 
+    (* TODO: should this be value or normalized?
+    => we step not in the type
+    => normalization already sufficient for value
+     *)
+    (* is_val T → *)
+    normalized T →
+    (* U might depend on x:T *)
+    is_val (Lam x T f U e)
+  (* compound values *)
+  (* 
+    sigma is like lambda (functions depending on previous values)
+    => only the first one should be a val
+  *)
+  | SigmaEmptyV: is_val (Sigma [])
+  (* we do not need to test the rest => (implicitely) depends on first one *)
+  | SigmaConsV x T args : 
+    (* same as lambda *)
+    is_val T → 
+    (* normalized T → *)
+    is_val (Sigma ((x, T) :: args))
+  | TupleV es : Forall is_val es → is_val (Tuple es)
+  | ArrayV x en T : 
+    is_val en →
+    is_val (Array x en T)
+  | PackV x en e :
+    is_val en →
+    is_val (Pack x en e)
+  .
+
+
 
 Lemma normalized_sound e:
   (* normalized_pred := ~ normalizable *)
@@ -650,7 +666,7 @@ Inductive ectx :=
   (* only context in T as U might depend on x:T *)
   | PiCtx (x:binder) (K: ectx) (U:expr) 
   (* the filter depends on the argument *)
-  | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr)
+  (* | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr) *)
   | AppLCtx (K: ectx) (v2 : expr)
   | AppRCtx (e1 : expr) (K: ectx) (H: is_val e1)
   (* only first argument in sigma *)
@@ -668,7 +684,7 @@ Fixpoint fill (K : ectx) (e : expr) : expr :=
   match K with
   | HoleCtx => e
   | PiCtx x K U => Pi x (fill K e) U
-  | LamCtx x K f U eb => Lam x (fill K e) f U eb
+  (* | LamCtx x K f U eb => Lam x (fill K e) f U eb *)
   | AppLCtx K v2 => App (fill K e) v2
   | AppRCtx e1 K _ => App e1 (fill K e)
   | SigmaCtx x K args => Sigma ((x, fill K e) :: args)
@@ -684,7 +700,7 @@ Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   match K1 with
   | HoleCtx => K2
   | PiCtx x K U => PiCtx x (comp_ectx K K2) U
-  | LamCtx x K f U e => LamCtx x (comp_ectx K K2) f U e
+  (* | LamCtx x K f U e => LamCtx x (comp_ectx K K2) f U e *)
   | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
   | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H
   | SigmaCtx x K args => SigmaCtx x (comp_ectx K K2) args
@@ -907,13 +923,13 @@ Proof.
   by eapply (fill_contextual_step (PiCtx x HoleCtx U)).
 Qed.
 
-Lemma contextual_step_lam x ef U e T T':
+(* Lemma contextual_step_lam x ef U e T T':
   contextual_step T T' →
   contextual_step (Lam x T ef U e) (Lam x T' ef U e).
 Proof.
   intros Hcontextual.
   by eapply (fill_contextual_step (LamCtx x HoleCtx ef U e)).
-Qed.
+Qed. *)
 
 Lemma contextual_step_app_l e1 e1' e2:
   contextual_step e1 e1' →
@@ -985,7 +1001,7 @@ Qed.
 #[export]
 Hint Resolve
   contextual_step_pi
-  contextual_step_lam
+  (* contextual_step_lam *)
   contextual_step_app_l
   contextual_step_app_r
   contextual_step_sigma
