@@ -141,11 +141,12 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       (* ignore x *)
       type_assignable Γ U e →
       TY Γ ⊢ (Lam BAnon T ef U e) : (Pi BAnon T U)
-    | typed_app Γ e eT x T U:
+    | typed_app Γ e eT x T U U':
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
       type_assignable Γ T eT →
-      TY Γ ⊢ (App e eT) : (subst' x eT U)
+      normal_eval (subst' x eT U) U' →
+      TY Γ ⊢ (App e eT) : U'
     (*
       all typed under the previous
       and dominating kind overall
@@ -197,18 +198,20 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ e : T →
       TY Γ ⊢ (Pack BAnon en e) : (Array BAnon en T)
-    | typed_extract_array Γ e ei en T x:
+    | typed_extract_array Γ e ei en T x T':
       (* transitively, we know en:Nat *)
       TY Γ ⊢ e : (Array x en T) →
       TY Γ ⊢ ei : (App Idx en) →
       (* we again handle named and unnamed simultanously *)
-      TY Γ ⊢ (Extract e ei) : (subst' x ei T)
-    | typed_extract_tuple Γ e ei Ts Ts' T n s U:
+      normal_eval (subst' x ei T) T' →
+      TY Γ ⊢ (Extract e ei) : T'
+    | typed_extract_tuple Γ e ei Ts Ts' Ts'' T n s U:
       TY Γ ⊢ e : (Sigma Ts) →
       n = length Ts →
       TY Γ ⊢ ei : (App Idx n) →
       Ts' = close_subst e n Ts →
-      normal_eval (Tuple Ts') T →
+      Forall2 normal_eval Ts' Ts'' →
+      normal_eval (Tuple Ts'') T →
       TY Γ ⊢ T : s ->
       normal_eval (Extract T ei) U ->
       TY Γ ⊢ (Extract e ei) : U
@@ -218,16 +221,17 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
-  | assignable_sigma Γ n Ts e:
+  | assignable_sigma Γ n Ts Ts'' e:
       (* 
         TODO:
         e#in is assignable to T_i under subst for all previous e
       *)
       n = length Ts ->
       let Ts' := close_subst e n Ts in
+      Forall2 normal_eval Ts' Ts'' ->
       (* Note: extracts can not be inlined, it need intransparency *)
       let es' := extracts n e in
-      Forall2 (type_assignable Γ) Ts' es' ->
+      Forall2 (type_assignable Γ) Ts'' es' ->
       type_assignable Γ (Sigma Ts) e
 where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
