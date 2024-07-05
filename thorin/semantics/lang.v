@@ -450,6 +450,13 @@ Inductive normalized : expr -> Prop :=
 (* TODO:
   enumerate full constructive (as far as possible) normalized predicate
   TODO: not up to date
+
+
+  we define is_val for normalized expressions => does not contain a beta redex
+  we do not go into types of dependencies (only decent along evaluation contexts)
+  but we descend under binders
+
+  applications and extracts are not values
 *)
 Inductive is_val : expr → Prop :=
 (* with is_val : expr → Prop := *)
@@ -465,7 +472,7 @@ Inductive is_val : expr → Prop :=
   | LitNatV n : is_val (LitNat n)
   | LitIdxV n i : is_val (LitIdx n i)
   | PiV x T U : 
-    is_val T →
+    (* is_val T → *)
     is_val (Pi x T U)
   | LamV x T f U e : 
     (* TODO: should this be value or normalized?
@@ -473,27 +480,31 @@ Inductive is_val : expr → Prop :=
     => normalization already sufficient for value
      *)
     (* is_val T → *)
-    normalized T →
+    (* normalized T → *)
     (* U might depend on x:T *)
+    is_val e ->
     is_val (Lam x T f U e)
   (* compound values *)
   (* 
     sigma is like lambda (functions depending on previous values)
     => only the first one should be a val
   *)
-  | SigmaEmptyV: is_val (Sigma [])
+  | SigmaV xs: is_val (Sigma xs)
+  (* | SigmaEmptyV: is_val (Sigma [])
   (* we do not need to test the rest => (implicitely) depends on first one *)
   | SigmaConsV x T args : 
     (* same as lambda *)
-    is_val T → 
+    (* is_val T →  *)
     (* normalized T → *)
-    is_val (Sigma ((x, T) :: args))
+    is_val (Sigma ((x, T) :: args)) *)
   | TupleV es : Forall is_val es → is_val (Tuple es)
   | ArrayV x en T : 
-    is_val en →
+    (* is_val en →
+    is_val T → *)
     is_val (Array x en T)
   | PackV x en e :
     is_val en →
+    is_val e →
     is_val (Pack x en e)
   .
 
@@ -804,6 +815,55 @@ Proof.
   destruct 1 as [K' e1' e2' -> ->].
   rewrite !fill_comp. by econstructor.
 Qed.
+
+Lemma values_dont_reduce e:
+  is_val e → ¬ reducible e.
+Proof.
+  intros Hv Hred.
+  destruct Hred.
+  destruct H as [K e1 e2 -> -> Hred].
+  induction K;simpl in Hv;inversion Hv;subst;try congruence.
+  all: try (now inversion Hred).
+  - (* Idx #n, Idx -> ... *)
+    destruct K;simpl in *;inversion H0;subst.
+    inversion Hred.
+  - (* Idx #n, #n -> ... *)
+    destruct K;simpl in H2;inversion H2;subst.
+    inversion Hred.
+  - apply Forall_app in H0 as [H1 H2].
+    inversion H2;subst.
+    congruence.
+Qed.
+
+
+(*
+  assume typed and normalized
+*)
+Lemma characterize_value e:
+  ¬ reducible e → is_val e.
+Proof.
+  intros H.
+  induction e;try now econstructor.
+  - admit. (* var -- ruled out by typed *)
+  - econstructor.
+    apply IHe4.
+    contradict H.
+    destruct H as [ebody' H].
+    destruct H as [K e1' e2' -> -> Hred].
+    eexists. 
+    eapply Ectx_step with (K:=LamCtx x e1 e2 e3 K);eauto.
+  - contradict H.
+    (* app *)
+    (* if typed and normalized => lambda => makes an app step *)
+    admit.
+  - admit. (* nested induction *)
+  - (* pack *)
+    admit.
+  - (* extract *)
+    (* if normalized (and typed), all extracts are evaluated *)
+    admit.
+Abort.
+
 
 (* TODO: we want is_val <-> ~ reducibile *)
 (* Lemma values_dont_reduce e:
