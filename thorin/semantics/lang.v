@@ -87,8 +87,9 @@ Outline types_sol.v:
 
 
 Inductive expr :=
-  | Star
-  | Box
+  (* | Star
+  | Box *)
+  | Sort (n:nat)
   | Bot
   | Nat
   | Idx 
@@ -137,7 +138,7 @@ Bind Scope expr_scope with expr.
 Fixpoint subst (x : string) (es : expr) (e : expr)  : expr :=
   let recurse_under y expr := if decide (y = BNamed x) then expr else subst x es expr in
   match e with
-  | Star | Box | Bot | Nat | Idx | LitNat _ | LitIdx _ _  => e
+  | Sort _ | Bot | Nat | Idx | LitNat _ | LitIdx _ _  => e
   | Var y => if decide (y = x) then es else e
   (* replace x in T, replace in U if not x *)
   | Pi y T U => 
@@ -252,8 +253,9 @@ Inductive normalize_step : expr -> expr -> Prop :=
     normalize_step (Extract e (LitIdx 1 Fin.F1)) e
   | normalize_tuple_one e:
     normalize_step (Tuple [e]) e
-  | normalize_sigma_one xT:
-    normalize_step (Sigma [xT]) (Sigma [xT])
+  | normalize_sigma_one x T:
+    normalize_step (Sigma [(x,T)]) T
+    (* normalize_step (Sigma [xT]) (Sigma [xT]) *)
   | normalize_tuple_beta xs n i e:
     length xs = n ->
     nth_error xs (` (Fin.to_nat i)) = Some e ->
@@ -280,6 +282,12 @@ Inductive normalize_step : expr -> expr -> Prop :=
     normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
   | normalize_sigma_array x n T:
     normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T)))
+
+  (* TODO: not in paper *)
+  | normalize_pack_one e:
+    normalize_step (Pack BAnon (LitNat 1) e) e
+  | normalize_array_one T:
+    normalize_step (Array BAnon (LitNat 1) T) T
 .
 
 (* TODO: do we need to require left-to-right or in-to-out order? *)
@@ -343,13 +351,17 @@ Definition normal_eval e e' :=
 (*
   a bit more constructive version
   => subexpressions and contradict normalization step in negative assumptions
+
+
+  TODO: change
 *)
 Inductive normalized : expr -> Prop :=
   (* atomic values *)
   (* conceptually, every value is normalized (not quite -- normalization goes under binders) *)
   (* but for distinction, differences and adaptation, we should keep normalization without is_val *)
-  | norm_Star: normalized Star
-  | norm_Box: normalized Box
+  (* | norm_Star: normalized Star
+  | norm_Box: normalized Box *)
+  | norm_Sort n: normalized (Sort n)
   | norm_Bot: normalized Bot
   | norm_Nat: normalized Nat
   | norm_Idx: normalized Idx
@@ -437,12 +449,14 @@ Inductive normalized : expr -> Prop :=
   .
 (* TODO:
   enumerate full constructive (as far as possible) normalized predicate
+  TODO: not up to date
 *)
 Inductive is_val : expr → Prop :=
 (* with is_val : expr → Prop := *)
   (* atomic values *)
-  | StarV : is_val Star
-  | BoxV : is_val Box
+  (* | StarV : is_val Star
+  | BoxV : is_val Box *)
+  | SortV n : is_val (Sort n)
   | BotV : is_val Bot
   | NatV : is_val Nat
   | IdxV : is_val Idx
@@ -622,11 +636,12 @@ As extra reduction step (+normalized requirement?)? As separate step in between?
 Inductive base_step : expr -> expr -> Prop :=
 (* 'real' steps (congruence steps later) *)
   | BetaS x T f U elam earg e' :
-    normalized T ->
-    is_val earg ->
+    (* not necessary if we only define beta on normalized terms *)
+    (* normalized T ->  *)
+    (* is_val earg -> *)
     e' = subst' x earg elam ->
     base_step (App (Lam x T f U elam) earg) e'
-  | IotaTupleS es n (i:Fin.t n) e:
+  (* | IotaTupleS es n (i:Fin.t n) e:
     (* extract from a tuple if all value *)
     (* needs canonical form lemma for Idx n *)
     (*
@@ -641,13 +656,22 @@ Inductive base_step : expr -> expr -> Prop :=
     nth_error es (` (Fin.to_nat i)) = Some e ->
     base_step (Extract (Tuple es) (LitIdx n i)) e
   (* extract of pack *)
-  | IotaPackS x e n ei e':
+  | IotaPackS x e en ei e':
     is_val ei -> (* implies ei = LitIdx n i (via canonical values?) *)
     e' = subst' x ei e ->
-    base_step (Extract (Pack x (LitNat n) e) ei) e'
+    (* TODO: do we need LitNat here or any arbitrary en? *)
+    (* base_step (Extract (Pack x (LitNat n) e) ei) e' *)
+    base_step (Extract (Pack x en e) ei) e' *)
   .
 
+(*
+  Extracts covered by normalization
+  for <x:en, e> # ei => e[ei/x]
+  we have a rule if en = n or x=_
+  we reach either case eventually
 
+  beta goes under binder
+*)
 
 
 (* evaluation contexts for congruence reduction *)
@@ -660,27 +684,42 @@ Inductive base_step : expr -> expr -> Prop :=
   only relevant for two sided reductions in app, extract, and tuple
 
   Note: we are a bit lazier => do not evaluate under binders
+
+
+  Change: we go under binders but not in types of dependencies => might lead to untyped code (no step in context necessary)
+  for dependent code, normalization is sufficient for our usage
 *)
 Inductive ectx :=
   | HoleCtx
   (* only context in T as U might depend on x:T *)
-  | PiCtx (x:binder) (K: ectx) (U:expr) 
+  (* | PiCtx (x:binder) (K: ectx) (U:expr)  *)
+  (* no, instead don't go under types *)
   (* the filter depends on the argument *)
   (* | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr) *)
+  (* do not go in (named) depency types *)
+  | LamCtx (x:binder) (T: expr) (f:expr) (U:expr) (K: ectx)
   | AppLCtx (K: ectx) (v2 : expr)
   | AppRCtx (e1 : expr) (K: ectx) (H: is_val e1)
   (* only first argument in sigma *)
-  | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr))
-  | TupleCtx (es1:list expr) (K: ectx) (es2: list expr) (H: Forall is_val es1)
+  (* | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr)) *)
+    (* (H: Forall is_val es1) *)
+  | TupleCtx (es1:list expr) (K: ectx) (es2: list expr) 
   (* only en is up to be a context *)
-  | ArrayCtx (x:binder) (K: ectx) (T:expr)
-  | PackCtx (x:binder) (K: ectx) (e:expr)
+  (* | ArrayCtx (x:binder) (K: ectx) (T:expr) *)
+  (* | PackCtx (x:binder) (K: ectx) (e:expr) *)
+  | PackLCtx (x:binder) (K: ectx) (e:expr)
+  | PackRCtx (x:binder) (en:expr) (K: ectx) 
   | ExtractLCtx (K: ectx) (ei:expr)
-  | ExtractRCtx (e:expr) (K: ectx) (H: is_val e)
+ (* (H: is_val e) *)
+  | ExtractRCtx (e:expr) (K: ectx)
+  (*
+  TODO: nothing in types? Even toplevel
+  => array, Pi, Sigma
+  *)
   .  
 
 (* Place an expression into the hole of a context *)
-Fixpoint fill (K : ectx) (e : expr) : expr :=
+(* Fixpoint fill (K : ectx) (e : expr) : expr :=
   match K with
   | HoleCtx => e
   | PiCtx x K U => Pi x (fill K e) U
@@ -693,10 +732,22 @@ Fixpoint fill (K : ectx) (e : expr) : expr :=
   | PackCtx x K eb => Pack x (fill K e) eb
   | ExtractLCtx K ei => Extract (fill K e) ei
   | ExtractRCtx eb K _ => Extract eb (fill K e)
+  end. *)
+Fixpoint fill (K : ectx) (e : expr) : expr :=
+  match K with
+  | HoleCtx => e
+  | LamCtx x T f U K => Lam x T f U (fill K e)
+  | AppLCtx K v2 => App (fill K e) v2
+  | AppRCtx e1 K H => App e1 (fill K e)
+  | TupleCtx es1 K es2 => Tuple (es1 ++ fill K e :: es2)
+  | PackLCtx x K eb => Pack x (fill K e) eb
+  | PackRCtx x en K => Pack x en (fill K e)
+  | ExtractLCtx K ei => Extract (fill K e) ei
+  | ExtractRCtx eb K => Extract eb (fill K e)
   end.
 
 (* Compose two evaluation contexts => place the second context into the hole of the first *)
-Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
+(* Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   match K1 with
   | HoleCtx => K2
   | PiCtx x K U => PiCtx x (comp_ectx K K2) U
@@ -709,7 +760,20 @@ Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   | PackCtx x K e => PackCtx x (comp_ectx K K2) e
   | ExtractLCtx K ei => ExtractLCtx (comp_ectx K K2) ei
   | ExtractRCtx e K H => ExtractRCtx e (comp_ectx K K2) H
+  end. *)
+Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
+  match K1 with
+  | HoleCtx => K2
+  | LamCtx x T f U K => LamCtx x T f U (comp_ectx K K2)
+  | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
+  | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H
+  | TupleCtx es1 K es2 => TupleCtx es1 (comp_ectx K K2) es2
+  | PackLCtx x K eb => PackLCtx x (comp_ectx K K2) eb
+  | PackRCtx x en K => PackRCtx x en (comp_ectx K K2)
+  | ExtractLCtx K ei => ExtractLCtx (comp_ectx K K2) ei
+  | ExtractRCtx eb K => ExtractRCtx eb (comp_ectx K K2)
   end.
+
 
 (** Contextual steps => lift reductions via contexts *)
 Inductive contextual_step (e1 : expr) (e2 : expr) : Prop :=
@@ -742,7 +806,7 @@ Proof.
 Qed.
 
 (* TODO: we want is_val <-> ~ reducibile *)
-Lemma values_dont_reduce e:
+(* Lemma values_dont_reduce e:
   is_val e → ¬ reducible e.
 Proof.
   intros Hv Hred.
@@ -759,7 +823,7 @@ Proof.
   - apply Forall_app in H1 as [H1 H2].
     inversion H2;subst.
     congruence.
-Qed.
+Qed. *)
 
 (*
 lemma is_val -> normalized
@@ -915,7 +979,7 @@ we need these lemmas for progress
 however, the context is an indirection over a simplification requiring a lemma to ease the automation burdon
 *)
 
-Lemma contextual_step_pi x T U T':
+(* Lemma contextual_step_pi x T U T':
   contextual_step T T' →
   contextual_step (Pi x T U) (Pi x T' U).
 Proof.
@@ -1013,4 +1077,4 @@ Hint Resolve
   : core.
 
 
-
+ *)

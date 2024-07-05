@@ -1239,6 +1239,87 @@ Arguments Forall2_nth_error {_ _ _ _ _}.
 
 
 
+
+
+
+
+
+
+
+
+
+Lemma typed_preservation_normal_step e e' A:
+  TY ∅ ⊢ e : A →
+  normalize_step e e' →
+  exists A', TY ∅ ⊢ e' : A' ∧
+  rtc normalize_step A A'.
+Proof.
+  intros Hty Hstep.
+  induction Hstep in A, Hty |- *.
+  all: inversion Hty;subst.
+  - eexists;split;eauto.
+    (*
+      TODO: 
+      e#0_1 => e
+      e has Array type, but it is (eb) or <x:1;eB> or <1;eB> (can it be some n that is not one? (e.g. function call))
+      is normalized (but not value)
+      e might be ((lam x @bot) 1)
+
+      => not even normalized enough to preserve type
+    *)
+  - eexists;split;eauto.
+  - inversion H0;subst.
+    eexists;eauto.
+  - eexists. econstructor;eauto.
+  - eexists. econstructor;eauto.
+  - inversion H4;subst.
+    specialize (Forall2_nth_error H1 _ _ H0) as [Ti [HTi Htyi]].
+    (* TODO: do we need something about the normal_eval? *)
+    eexists. eauto.
+  - inversion H3;subst.
+    specialize (Forall2_nth_error H1 _ _ H0) as [Ti [HTi Htyi]].
+    (* TODO: do we need something about the normal_eval? *)
+    eexists. eauto.
+  - inversion H2;subst.
+    eexists. eauto.
+  - inversion H1.
+  - (* eta tuple case *)
+    eexists.
+    admit.
+    (* TODO: needs lemma that something has Sigma-like type (or at least a type for now), if each extract is typed *)
+  - inversion H1;subst.
+    + destruct n;simpl in *;[lia|congruence].
+    + destruct n;try lia;simpl in *.
+      inversion H0;subst.
+      (* or inversion H1;subst. *)
+      eexists. econstructor;eauto.
+  - destruct n;simpl in *;[lia|congruence]. (* TODO: why is this contradictory *)
+  - destruct n;simpl in *;try lia.
+    inversion H0;subst. (* TODO: why is this contradictory *)
+  - destruct n;simpl in *;try lia.
+    inversion H0;subst.
+    eexists. econstructor;eauto.
+    inversion H4;subst;firstorder.
+  - inversion H3;subst.
+  (*
+  assignable => has some (similar) type (not necessarily normal-equivalent)
+
+  assignable ≃ (maybe nested) sigma replace by substed variant
+  lambdas use assignable and extracts subst-close always
+  *)
+    + admit. (* subst with assignable? *)
+    + simpl. admit. (* same but simpler *)
+  - eexists. econstructor.
+    all: admit. (* if typed with context => instantiate typed *)
+  - admit. (* if typed with context => instantiate typed *)
+Admitted.
+
+
+
+
+
+
+
 Lemma typed_preservation_normal_step e e' A:
   TY ∅ ⊢ e : A →
   normalize_step e e' →
@@ -1285,7 +1366,9 @@ Proof.
   - inversion H3;subst.
   (*
   assignable => has some (similar) type (not necessarily normal-equivalent)
-  
+
+  assignable ≃ (maybe nested) sigma replace by substed variant
+  lambdas use assignable and extracts subst-close always
   *)
     + admit. (* subst with assignable? *)
     + simpl. admit. (* same but simpler *)
@@ -1294,6 +1377,100 @@ Proof.
   - admit. (* if typed with context => instantiate typed *)
 Admitted.
 
+Lemma typed_preservation_full_normal_step e e' A:
+  TY ∅ ⊢ e : A →
+  full_contextual_step e e' →
+  exists A', TY ∅ ⊢ e' : A'.
+(* and A' is normalize_reachable from A *)
+Proof.
+  intros Hty Hstep.
+  destruct Hstep as [K e1' e2' -> -> Hstep].
+  induction K in A, Hty |- *;simpl in *.
+  1: eapply typed_preservation_normal_step;eauto.
+  all: inversion Hty;subst.
+  - edestruct IHK;eauto.
+    eexists. econstructor.
+    + eauto.
+    + admit. (* step in context,  *)
+    + admit. (* non trivial sort/kind reasoning *)
+  - admit. (* same as previous case *)
+  - (* pi step right *)
+    admit. (* needs contexts for IH *)
+  - admit. (* pi step right unnamed *)
+  - (* lam ty *)
+    eexists;econstructor.
+    + admit. (* IH *)
+    + admit. (* context step *)
+    + admit. (* context step *)
+    + admit. (* context step under assignable *)
+  - (* lam ty unnamed *)
+    admit.
+  - (* lam filter *)
+    eexists;econstructor.
+    + eassumption.
+    + eassumption.
+    + admit. (* IH under context *)
+    + eassumption.
+  - (* lam filter unnamed *)
+    admit.
+  - admit. (* lam return type *)
+  - admit. (* lam return type unnamed *)
+  - admit. (* lam body *)
+  - admit. (* lam body unnamed *)
+  - (* app left *)
+    edestruct IHK;eauto.
+    eexists;econstructor.
+    + admit. (* we need that the expression also is a pi => normal_form lemma would give this as Pi only normalizes to Pi *)
+    + eassumption.
+  - (* app right *)
+    (* edestruct IHK;eauto. *)
+    eexists;econstructor.
+    + eassumption.
+    + admit. (* need type assignability (mutual) strengthening *)
+  - (* sigma empty context *)
+    destruct xs1;simpl in *;congruence.
+  - (* sigma *)
+    assert(exists A, TY ∅ ⊢ full_fill K e1' : A) as [Te1' HTe1'].
+    {
+      admit. (* IH *)
+    }
+    edestruct IHK;eauto.
+    admit.
+  - (* sigma unnamed *)
+    admit.
+  - (* Tuple *)
+    admit.
+  - (* Array *)
+    edestruct IHK;eauto.
+    eexists;econstructor.
+    2: admit. (* needs that the type of e2' is a nat => Nat only normalizes into nat *)
+    eauto.
+    admit. (* step in context *)
+  - (* array unnamed *)
+    admit.
+  - (* Array body *)
+    admit.
+  - (* array body unnamed *)
+    admit.
+  - (* pack *)
+    admit.
+  - (* pack unnamed *)
+    admit.
+  - (* pack body *)
+    admit.
+  - (* pack body unnamed *)
+    admit.
+  - (* extract array left *)
+    edestruct IHK;eauto.
+    eexists;econstructor;eauto.
+    admit. (* need that body has array type *)
+  - (* extract tuple left *)
+    admit.
+  - (* extract array right *)
+    admit.
+  - (* extract tuple right *)
+    admit.
+Admitted.
 
 Lemma typed_preservation_normal_eval e e' A A':
   TY ∅ ⊢ e : A →
