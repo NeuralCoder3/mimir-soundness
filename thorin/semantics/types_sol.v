@@ -26,22 +26,22 @@ Implicit Types
   (Γ : typing_context)
   (e : expr).
 
-Inductive kind_dominance: list expr -> expr -> Prop :=
+(* Inductive kind_dominance: list expr -> expr -> Prop :=
   | empty_dom: kind_dominance [] Star
   | star_idem xs s':
       kind_dominance xs s' →
       kind_dominance (Star::xs) s'
   | box_dom xs s':
       kind_dominance xs s' →
-      kind_dominance (Box::xs) Box
+      kind_dominance (Box::xs) Box *)
 (* where "[ s1 s2 .. sn ] ⇝ s" := (kind_dominance [s1; s2; ..; sn] s). *)
-.
+(* . *)
 
 
 (* TODO: check with page 46 in https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf *)
 
 (* TODO: kind vs sort *)
-Definition sort s := s = Star \/ s = Box.
+(* Definition sort s := s = Star \/ s = Box. *)
 
 Require Import Coq.Program.Wf.
 
@@ -79,12 +79,18 @@ Definition extracts n e :=
   map (fun idx => Extract e (LitIdx n idx)) idxs
   .
 
+Definition Star := Sort 0.
+Definition insert_name (x: binder) (e: expr) (Γ: typing_context) :=
+  match x with
+  | BNamed x => <[x := e]> Γ
+  | BAnon => Γ
+  end.
 
 Reserved Notation "'TY' Γ ⊢ e : A" (at level 74, e, A at next level).
 Reserved Notation "'TY' Γ ⊢ A ← e" (at level 74, e, A at next level).
 Inductive syn_typed : typing_context → expr → expr → Prop :=
-   | typed_star Γ:
-      TY Γ ⊢ Star : Box
+   | typed_sort Γ n:
+      TY Γ ⊢ Sort n : Sort (S n)
    | typed_bot Γ:
       TY Γ ⊢ Bot : Star
    | typed_nat Γ:
@@ -96,24 +102,26 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
     | typed_lit_idx Γ n i:
       (* i < n by construction i:fin n *)
       TY Γ ⊢ (LitIdx n i) : (App Idx n)
-    | typed_var Γ x A sA:
+    | typed_var Γ x A :
       Γ !! x = Some A →
       (* TODO: missing in paper: A has to be typed (with a kind) *)
-      TY Γ ⊢ A : sA →
+      (* we check types at binder position, otherwise endless loop *)
+      (* TY Γ ⊢ A : sA → *)
       TY Γ ⊢ (Var x) : A
     (* no axiom typing *)
-    | typed_pi Γ T sT x U sU s:
-      TY Γ ⊢ T : sT →
-      TY (<[x := T]> Γ) ⊢ U : sU →
-      kind_dominance [sT; sU] s →
-      TY Γ ⊢ (Pi (BNamed x) T U) : s
-    | typed_pi_anon Γ T sT U sU s:
+    | typed_pi Γ T sT x U sU:
+      TY Γ ⊢ T : Sort sT →
+      (* TY (<[x := T]> Γ) ⊢ U : sU → *)
+      TY (insert_name x T Γ) ⊢ U : Sort sU →
+      (* kind_dominance [sT; sU] s → *)
+      TY Γ ⊢ (Pi x T U) : (max sT sU)
+    (* | typed_pi_anon Γ T sT U sU s:
       (* same as above but ignore unnamed binder *)
       TY Γ ⊢ T : sT →
       TY Γ ⊢ U : sU →
-      kind_dominance [sT; sU] s →
-      TY Γ ⊢ (Pi BAnon T U) : s
-    | typed_lam Γ x T ef U e sT sU:
+      (* kind_dominance [sT; sU] s → *)
+      TY Γ ⊢ (Pi BAnon T U) : (max sT sU) *)
+    | typed_lam Γ x T ef U e s:
       (* TODO: typing of T and U (not in paper) (star as well as box allowed) 
 
       (well we might want to allow app, ... => any valid type
@@ -128,19 +136,20 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
         U = * : Box
         λ (x:Nat) : *, Nat
       *)
-      TY Γ ⊢ T : sT →
-      TY (<[x := T]> Γ) ⊢ U : sU →
-      TY (<[x := T]> Γ) ⊢ ef : Bool →
+      (* TY Γ ⊢ T : sT →
+      TY (insert_name x T Γ) ⊢ U : sU → *)
+      TY Γ ⊢ (Pi x T U) : s →
+      TY (insert_name x T Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
-      type_assignable (<[x := T]> Γ) U e →
-      TY Γ ⊢ (Lam (BNamed x) T ef U e) : (Pi (BNamed x) T U)
-    | typed_lam_anon Γ T ef U e sT sU:
+      type_assignable (insert_name x T Γ) U e →
+      TY Γ ⊢ (Lam x T ef U e) : (Pi x T U)
+    (* | typed_lam_anon Γ T ef U e sT sU:
       TY Γ ⊢ T : sT →
       TY Γ ⊢ U : sU →
       TY Γ ⊢ ef : Bool →
       (* ignore x *)
       type_assignable Γ U e →
-      TY Γ ⊢ (Lam BAnon T ef U e) : (Pi BAnon T U)
+      TY Γ ⊢ (Lam BAnon T ef U e) : (Pi BAnon T U) *)
     | typed_app Γ e eT x T U U':
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
@@ -157,16 +166,16 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
     (* TODO: mistake in pdf (n-2 in assumption) *)
     | typed_sigma_empty Γ:
       TY Γ ⊢ Sigma [] : Star
-    | typed_sigma_cons Γ x T s xs s' s'':
-      TY Γ ⊢ T : s →
-      TY (<[x := T]> Γ) ⊢ Sigma xs : s' →
-      kind_dominance [s; s'] s'' →
-      TY Γ ⊢ (Sigma ((BNamed x, T)::xs)) : s''
-    | typed_sigma_cons_anon Γ T s xs s' s'':
+    | typed_sigma_cons Γ x T s xs s' :
+      TY Γ ⊢ T : Sort s →
+      TY (insert_name x T Γ) ⊢ Sigma xs : Sort s' →
+      (* kind_dominance [s; s'] s'' → *)
+      TY Γ ⊢ (Sigma ((x, T)::xs)) : Sort (max s s')
+    (* | typed_sigma_cons_anon Γ T s xs s' s'':
       TY Γ ⊢ T : s →
       TY Γ ⊢ Sigma xs : s' →
       kind_dominance [s; s'] s'' →
-      TY Γ ⊢ (Sigma ((BAnon, T)::xs)) : s''
+      TY Γ ⊢ (Sigma ((BAnon, T)::xs)) : s'' *)
     | typed_tuple Γ es Ts T:
       Forall2 (syn_typed Γ) es Ts →
       (* 
@@ -180,24 +189,26 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
     | typed_arr Γ x en T s:
       (* TODO: mistake in pdf (s vs s') *)
       (* TODO: s should be a kind (it is not restricted in Pdf) => why does it need to be a kind? Why can't we have <<x:5;5>> with s = Nat *)
-      sort s →
+      (* sort s → *)
       TY Γ ⊢ en : Nat →
-      TY (<[x := App Idx en]> Γ) ⊢ T : s →
-      TY Γ ⊢ (Array (BNamed x) en T) : s
-    | typed_arr_anon Γ en T s:
+      (* TY (<[x := App Idx en]> Γ) ⊢ T : s → *)
+      (* TY (insert_name x (App Idx en) Γ) ⊢ T : s → *)
+      TY (insert_name x (App Idx en) Γ) ⊢ T : Sort s →
+      TY Γ ⊢ (Array x en T) : s
+    (* | typed_arr_anon Γ en T s:
       sort s →
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ T : s →
-      TY Γ ⊢ (Array BAnon en T) : s
+      TY Γ ⊢ (Array BAnon en T) : s *)
     | typed_pack Γ x en e T U:
       TY Γ ⊢ en : Nat →
-      TY (<[x := App Idx en]> Γ) ⊢ e : T →
-      normal_eval (Array (BNamed x) en T) U →
-      TY Γ ⊢ (Pack (BNamed x) en e) : U
-    | typed_pack_anon Γ en e T:
+      TY (insert_name x (App Idx en) Γ) ⊢ e : T →
+      normal_eval (Array x en T) U →
+      TY Γ ⊢ (Pack x en e) : U
+    (* | typed_pack_anon Γ en e T:
       TY Γ ⊢ en : Nat →
       TY Γ ⊢ e : T →
-      TY Γ ⊢ (Pack BAnon en e) : (Array BAnon en T)
+      TY Γ ⊢ (Pack BAnon en e) : (Array BAnon en T) *)
     | typed_extract_array Γ e ei en T x T':
       (* transitively, we know en:Nat *)
       TY Γ ⊢ e : (Array x en T) →
@@ -388,32 +399,32 @@ Proof.
   all: eauto.
   - (* var *) 
     (* intros x A sA Hlookup Hty IH. *)
-    econstructor. 1: by eapply lookup_weaken. apply H. done.
+    econstructor. by eapply lookup_weaken. 
   - (* pi *) 
     econstructor; eauto.
-    eapply H0. apply insert_mono. done.
-  - (* lam *) econstructor; eauto using insert_mono.
-  - (* lam anon *)
-    econstructor; eauto.
+    eapply H0. destruct x;simpl;eauto using insert_mono. 
+  - (* lam *) econstructor;destruct x; eauto using insert_mono.
   - (* sigma *)
-    econstructor;eauto using insert_mono.
+    econstructor;destruct x;eauto using insert_mono.
   - (* Tuple *)
     econstructor;eauto.
     admit. (* needs nested induction for sigma *)
   - (* Array *)
     econstructor; eauto.
     apply H0.
-    now apply insert_mono.
+    destruct x; eauto using insert_mono.
   - (* Pack *)
     econstructor; eauto.
     apply H0.
-    now apply insert_mono.
+    destruct x; eauto using insert_mono.
   - (* assignable *)
     constructor;eauto.
   - (* assignable Sigma *)
-    eapply assignable_sigma;first reflexivity.
-    subst. subst Ts' es'.
-    admit. (* needs nested induction *)
+    subst; subst Ts' es'.
+    eapply assignable_sigma.
+    2: eassumption.
+    + reflexivity.
+    + admit. (* needs nested induction *)
 Admitted.
 
 Corollary typed_weakening Γ Δ e A:
@@ -548,15 +559,15 @@ is usually easier/faster
   Especially since we only use kind_dominance binary, 
   a subst idempotency lemma specialized for this case is helpful
 *)
-Lemma kind_subst_invariant xs s x es:
+(* Lemma kind_subst_invariant xs s x es:
   kind_dominance xs s →
   subst x es s = s /\ Forall (λ s, subst x es s = s) xs.
 Proof.
   induction 1;simpl;split;try destruct IHkind_dominance.
   all: eauto.
-Qed.
+Qed. *)
 
-Corollary kind_subst_invariant_apply s1 s2 s x es:
+(* Corollary kind_subst_invariant_apply s1 s2 s x es:
   kind_dominance [s1;s2] s →
   kind_dominance [subst x es s1;subst x es s2] (subst x es s).
 Proof.
@@ -567,7 +578,7 @@ Proof.
   inversion_clear H3.
   rewrite H1. rewrite H. rewrite H2.
   assumption.
-Qed.
+Qed. *)
 
 
 (*
@@ -577,6 +588,12 @@ Corollary subst_map x a e' T Γ:
 <[x:=subst a e' T]> (subst a e' <$> Γ) = subst a e' <$> (<[x:=T]> Γ).
 Proof.
   now rewrite fmap_insert.
+Qed.
+
+Corollary insert_subst_map x a e' T Γ:
+insert_name x (subst a e' T) (subst a e' <$> Γ) = subst a e' <$> (insert_name x T Γ).
+Proof.
+  destruct x;eauto using subst_map.
 Qed.
 
 (*
@@ -599,7 +616,7 @@ Proof.
       simpl.
       now destruct decide;congruence.
     + destruct decide as [Heq'|Heq'].
-      * admit.
+      * admit. 
       * simpl. destruct decide;congruence.
   (* ... *)
 Admitted.
@@ -657,12 +674,10 @@ Proof.
       eapply typed_weakening;first eassumption.
       apply map_empty_subseteq.
     + econstructor.
-      * rewrite lookup_insert_ne in H; eauto.
-        now rewrite lookup_fmap H;simpl.
-      * eapply IHsyn_typed;first eassumption; easy.
+      rewrite lookup_insert_ne in H; eauto.
+      now rewrite lookup_fmap H;simpl.
   - (* Pi *)
     econstructor.
-    3: apply kind_subst_invariant_apply,H1.
     + eapply IHsyn_typed1; eauto.
     + destruct decide.
       * symmetry in e. inversion e ;subst.
@@ -670,49 +685,27 @@ Proof.
         (* TODO: we should not subst under U => need to know that x already bounds? *)
 
         (* TODO: do we need to rule this case out (binder same name as subst variable?) or do we need stronger subst statements about expression/type subst (maybe independent) *)
-        admit.
-      * rewrite subst_map.
+        admit. (* TODO: name clash *)
+      * rewrite insert_subst_map.
         eapply IHsyn_typed2;eauto.
-        apply insert_commute. congruence.
-  - (* pi anon *)
-    econstructor.
-    (* 3: {
-      pose proof H1.
-      apply kind_subst_invariant with (x:=a) (es:=e') in H2 as [H3 H4].
-      inversion_clear H4.
-      inversion_clear H5.
-      rewrite <- H3 in H1.
-      rewrite <- H2 in H1.
-      rewrite <- H4 in H1.
-      apply H1.
-    } *)
-    + eapply IHsyn_typed1; eauto.
-    + eapply IHsyn_typed2; eauto.
-    + now apply kind_subst_invariant_apply.
+        destruct x;eauto using insert_commute with congruence.
   - (* Lambda named *)
+    simpl in IHsyn_typed1.
+    specialize (IHsyn_typed1 Γ a A).
     destruct decide.
-    + (* TODO: should not happen *)
+    + (* TODO: name clash should not happen *)
       admit.
     + econstructor.
       * eapply IHsyn_typed1;eauto.
-      * rewrite subst_map.
+      * rewrite insert_subst_map.
         eapply IHsyn_typed2;eauto.
-        apply insert_commute. congruence.
-      * rewrite subst_map.
-        eapply IHsyn_typed3;eauto.
-        apply insert_commute. congruence.
+        destruct x;eauto using insert_commute with congruence.
       * admit. (* needs assignable induction *)
-  - (* Lambda anon *)
-    econstructor.
-    + eapply IHsyn_typed1;eauto.
-    + eapply IHsyn_typed2;eauto.
-    + eapply IHsyn_typed3;eauto.
-    + admit. (* needs assignable induction *)
   - (* App *)
-    rewrite subst'_distr.
+    (* rewrite subst'_distr.
     2: {
       admit. (* TODO: no name clash *)
-    }
+    } *)
     eapply typed_app.
     + cbn in IHsyn_typed.
       specialize (IHsyn_typed Γ a A).
@@ -720,22 +713,17 @@ Proof.
       replace (if decide (x = a) then U else subst a e' U) with (subst a e' U) in IHsyn_typed by admit.
       apply IHsyn_typed;eauto.
     + admit. (* needs assignable induction *)
+    + admit. (* normalize TODO: *)
   - (* Sigma *)
     econstructor.
     + eapply IHsyn_typed1;eauto.
-    + rewrite subst_map.
-      specialize (IHsyn_typed2 (<[x:=T]> Γ) a A).
+    + rewrite insert_subst_map.
+      specialize (IHsyn_typed2 (insert_name x T Γ) a A).
       simpl in IHsyn_typed2.
       destruct decide.
       1: admit. (* TODO: no name clash *)
       apply IHsyn_typed2;eauto.
-      apply insert_commute. congruence.
-    + apply kind_subst_invariant_apply;eassumption.
-  - (* Sigma anon *)
-    econstructor.
-    + eapply IHsyn_typed1;eauto.
-    + eapply IHsyn_typed2;eauto.
-    + apply kind_subst_invariant_apply;eassumption.
+      destruct x;eauto using insert_commute with congruence.
   - (* Tuple *)
     apply typed_tuple with (Ts:=map (subst a e') Ts).
     + admit.
@@ -757,37 +745,32 @@ Proof.
       *)
   - (* Array *)
     econstructor.
-    + destruct H;subst;simpl;[now left|now right].
+    (* + destruct H;subst;simpl;[now left|now right]. *)
     + eapply IHsyn_typed1;eauto.
     + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
-      rewrite subst_map.
+      rewrite insert_subst_map.
       destruct decide.
       1: admit. (* TODO: no name clash *)
       eapply IHsyn_typed2;eauto.
-      apply insert_commute. congruence.
-  - (* Array anon *)
-    econstructor.
-    + destruct H;subst;simpl;[now left|now right].
-    + eauto.
-    + eauto.
+      destruct x;eauto using insert_commute with congruence.
   - (* Pack *)
     econstructor.
     + eapply IHsyn_typed1;eauto.
     + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
-      rewrite subst_map.
+      rewrite insert_subst_map.
       destruct decide.
       1: admit. (* TODO: no name clash *)
       eapply IHsyn_typed2;eauto.
-      apply insert_commute. congruence.
+      destruct x;eauto using insert_commute with congruence.
     + admit. (*
       need normalize_eval also Array
       TODO: does this hold?
     *)
   - (* Extract array *)
-    rewrite subst'_distr.
+    (* rewrite subst'_distr.
     2: {
       admit. (* TODO: no name clash *)
-    }
+    } *)
     eapply typed_extract_array.
     + specialize (IHsyn_typed1 Γ a A).
       simpl in IHsyn_typed1.
@@ -796,9 +779,21 @@ Proof.
       eapply IHsyn_typed1;eauto.
     + change (Idx (subst a e' en)) with (subst a e' (Idx en)).
       eapply IHsyn_typed2;eauto.
+    + admit. (* TODO: normalize *)
   - (* Extract tuple *)
-    eapply typed_extract_tuple with (n:=length Ts);eauto.
-    admit. (* TODO: fold subst keeps length *)
+    eapply typed_extract_tuple with (n:=length Ts).
+    1: {
+      simpl in IHsyn_typed1.
+      eapply IHsyn_typed1;eauto.
+    }
+    3: reflexivity.
+    2: {
+      eapply IHsyn_typed2;eauto.
+    }
+    4: {
+      eapply IHsyn_typed3;eauto.
+    }
+    all: admit. (* normalize under subst TODO: with additional normalize *)
 Admitted.
 
 
@@ -815,13 +810,13 @@ e : Idx en (unnecessary?)
   e : Nat
 *)
 
-Lemma canonical_kind xs s:
+(* Lemma canonical_kind xs s:
   kind_dominance xs s →
   sort s.
 Proof.
   intros H.
   induction H;auto;firstorder.
-Qed.
+Qed. *)
 
 (* all general cases that are contradictory 
   manually identified while proving the canonical value idx lemma
@@ -835,20 +830,20 @@ Ltac no_nonsense_canonical :=
 
       Array named/anon
     *)
-    match goal with
+    (* match goal with
     | H: sort ?s |- _ => try (inversion H;congruence)
     end
-  |
+  | *)
     (*
       Look for assumption kind_dominance xs s where s is not Star, Box or a variable
       apply canonical_kind;congruence
 
       Pi named/anon, Sigma named/anon
     *)
-    match goal with
+    (* match goal with
     | H: kind_dominance ?xs ?s |- _ => try (apply canonical_kind in H as [];congruence)
     end
-  |
+  | *)
     (* 
     find an illegal Idx expression as function value
     e.g.
@@ -1009,12 +1004,12 @@ Proof.
 Admitted.
 
 
-Definition add_binder x e Γ := 
+(* Definition add_binder x e Γ := 
   match x with
   | BAnon => Γ
   | BNamed x => <[x:=e]> Γ
   end.
-Transparent add_binder.
+Transparent add_binder. *)
 
 
 (* TODO: this changes with normalization *)
@@ -1026,7 +1021,7 @@ Lemma canonical_value_array Γ e x en T:
     e = Pack x en eb
     /\ is_val en
     /\ TY Γ ⊢ en : Nat
-    /\ TY (add_binder x (Idx en) Γ) ⊢ eb : T.
+    /\ TY (insert_name x (Idx en) Γ) ⊢ eb : T.
 Proof.
   intros Hty Hv.
   inversion Hty;subst;simpl.

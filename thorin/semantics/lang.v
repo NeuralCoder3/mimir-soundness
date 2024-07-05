@@ -499,7 +499,7 @@ Inductive is_val : expr → Prop :=
 
 
 
-Lemma normalized_sound e:
+(* Lemma normalized_sound e:
   (* normalized_pred := ~ normalizable *)
   normalized e -> ~ normalizable e.
 Proof.
@@ -608,7 +608,7 @@ Proof.
       * contradict H3. eauto.
     + contradict IHnormalized1;eexists;econstructor;eauto.
     + contradict IHnormalized2;eexists;econstructor;eauto.
-Admitted.
+Admitted. *)
 
 
 
