@@ -1175,3 +1175,12 @@ Qed.
 
 #[export]
 Hint Resolve contextual_step_lambda contextual_step_app_l contextual_step_app_r : core.
+
+
+
+Lemma norm_inversion_Bot e:
+  normalize_step Bot e → e = Bot.
+Proof.
+  intros Hnorm.
+  inversion Hnorm;subst;auto.
+Qed.
