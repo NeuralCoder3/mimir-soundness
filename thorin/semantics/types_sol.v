@@ -142,6 +142,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY (insert_name x T Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       type_assignable (insert_name x T Γ) U e →
+      (* without tuples, assignable becomes typed *)
+      (* TY (insert_name x T Γ) ⊢ e : U → *)
       TY Γ ⊢ (Lam x T ef U e) : (Pi x T U)
     (* | typed_lam_anon Γ T ef U e sT sU:
       TY Γ ⊢ T : sT →
@@ -154,6 +156,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
       type_assignable Γ T eT →
+      (* without tuples, assignable becomes typed *)
+      (* TY Γ ⊢ eT : T → *)
       normal_eval (subst' x eT U) U' →
       TY Γ ⊢ (App e eT) : U'
     (*
@@ -164,7 +168,7 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       of pairwise domainance
     *)
     (* TODO: mistake in pdf (n-2 in assumption) *)
-    | typed_sigma_empty Γ:
+    (* | typed_sigma_empty Γ:
       TY Γ ⊢ Sigma [] : Star
     | typed_sigma_cons Γ x T s xs s' :
       TY Γ ⊢ T : Sort s →
@@ -225,14 +229,14 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       normal_eval (Tuple Ts'') T →
       TY Γ ⊢ T : s ->
       normal_eval (Extract T ei) U ->
-      TY Γ ⊢ (Extract e ei) : U
+      TY Γ ⊢ (Extract e ei) : U *)
 
 with type_assignable : typing_context -> expr -> expr -> Prop :=
   | assignable_typed Γ e T:
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
-  | assignable_sigma Γ n Ts Ts'' e:
+  (* | assignable_sigma Γ n Ts Ts'' e:
       (* 
         TODO:
         e#in is assignable to T_i under subst for all previous e
@@ -243,7 +247,7 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       (* Note: extracts can not be inlined, it need intransparency *)
       let es' := extracts n e in
       Forall2 (type_assignable Γ) Ts'' es' ->
-      type_assignable Γ (Sigma Ts) e
+      type_assignable Γ (Sigma Ts) e *)
 where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
 .
@@ -404,6 +408,7 @@ Proof.
     econstructor; eauto.
     eapply H0. destruct x;simpl;eauto using insert_mono. 
   - (* lam *) econstructor;destruct x; eauto using insert_mono.
+  (*
   - (* sigma *)
     econstructor;destruct x;eauto using insert_mono.
   - (* Tuple *)
@@ -417,15 +422,19 @@ Proof.
     econstructor; eauto.
     apply H0.
     destruct x; eauto using insert_mono.
+  *)
   - (* assignable *)
     constructor;eauto.
+  (*
   - (* assignable Sigma *)
     subst; subst Ts' es'.
     eapply assignable_sigma.
     2: eassumption.
     + reflexivity.
     + admit. (* needs nested induction *)
-Admitted.
+  *)
+(* Admitted. *)
+Qed.
 
 Corollary typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
@@ -874,8 +883,13 @@ Lemma canonical_value_idx Γ e (n:nat):
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
+  inversion H;subst.
+  simpl in H1.
+  admit. (* Star does not normalize to Idx *)
+  (* 
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Idx) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
 (*
@@ -883,7 +897,7 @@ Admitted.
   There is no invalid extract.
   Especially, we never can extract from an empty tuple
 *)
-Example untyped_empty_extract:
+(* Example untyped_empty_extract:
     (* we might as well assume ei is a value
       (by soundess, we can evaluate to a value)
     *)
@@ -932,7 +946,7 @@ Proof.
     simpl in H3.
     pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
     inversion i.
-Admitted.
+Admitted. *)
 
 Lemma canonical_value_pi Γ e x T U:
   TY Γ ⊢ e : Pi x T U →
@@ -940,16 +954,20 @@ Lemma canonical_value_pi Γ e x T U:
   
   (e = Idx ∧ x = BAnon /\ T = Nat ∧ U = Star) ∨
   exists f ef, 
-    (e = Lam x T f U ef ∧ is_val T).
+    (e = Lam x T f U ef).
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
+  inversion H;subst.
+  admit. (* Star does not normalize to Pi *)
+  (*
   - (* lambda named *)
     right. eauto.
   - (* lambda anon *)
     right. eauto.
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Pi) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
 Lemma canonical_value_nat Γ e:
@@ -960,11 +978,15 @@ Lemma canonical_value_nat Γ e:
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
+  inversion H;subst.
+  admit. (* Star does not normalize to Nat *)
+  (*
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Nat) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
-Lemma canonical_value_sigma Γ e Ts:
+(* Lemma canonical_value_sigma Γ e Ts:
   TY Γ ⊢ e : Sigma Ts →
   is_val e ->
   
@@ -1001,7 +1023,7 @@ Proof.
     do 2 eexists;f_equal;eauto.
     pose proof (canonical_value_nat _ _ H H3) as [n ->].
     admit. (* TODO: need that normalization Array to Sigma preserves length *)
-Admitted.
+Admitted. *)
 
 
 (* Definition add_binder x e Γ := 
@@ -1013,7 +1035,7 @@ Transparent add_binder. *)
 
 
 (* TODO: this changes with normalization *)
-Lemma canonical_value_array Γ e x en T:
+(* Lemma canonical_value_array Γ e x en T:
   TY Γ ⊢ e : Array x en T ->
   is_val e ->
   
@@ -1036,7 +1058,7 @@ Proof.
     *)
   - (* Pack anon *)
     eauto 10.
-Admitted.
+Admitted. *)
 
 
 
@@ -1051,18 +1073,51 @@ e is a value or
 exists e' s.t. e -> e'
 *)
 
+(*
+  we now go under binder => need Γ
+*)
+
 Lemma typed_progress_mut:
   (* everything except var works out with Γ instead of ∅ *)
   (forall Γ e A (H:TY Γ ⊢ e : A),
-    Γ = ∅ ->
+    (* Γ = ∅ -> *)
+    (* (exists x, e = Var x) \/ *)
     is_val e ∨ reducible e) /\
   (forall Γ A e (H:type_assignable Γ A e),
-    Γ = ∅ ->
+    (* Γ = ∅ -> *)
     is_val e ∨ reducible e).
 Proof.
   eapply typed_ind;intros;subst;eauto 10 using is_val.
+  (* 
   - (* var *)
-    inversion e.
+    (* inversion e. *)
+    left. constructor.
+  *)
+  - (* Lambda *)
+    destruct H1 as [HvalT|[? ?]].
+    + left. now constructor.
+    + right. eexists. eauto.
+      (* destruct H1 as [e' [K ? ? -> -> Hstep]].
+      eexists.
+      eapply Ectx_step with (K:= LamCtx x T ef U K);eauto. *)
+  - (* App *)
+    destruct H.
+    + destruct H0.
+      * (* canonical value *)
+        specialize (canonical_value_pi _ _ _ _ _ s H) as [(->&->&->&->)|(f&ef&->)].
+        -- (* canonical value Idx *)
+          inversion t;subst.
+          specialize (canonical_value_nat _ _ H1 H0) as [m ->].
+          left. constructor.
+        -- right.
+          eexists. eapply base_contextual_step.
+          eapply BetaS. reflexivity.
+      * right. destruct H0.
+        eexists. eauto.
+    + right. destruct H.
+      eexists. eauto.
+Qed.
+(*
   - (* pi *)
     destruct H;eauto.
     + left. now constructor.
@@ -1204,7 +1259,7 @@ Proof.
       is_val e' ∨ reducible e'
     *)
 Admitted.
-
+*)
 
 Corollary typed_progress e A:
   (* everything except var works out with Γ instead of ∅ *)
@@ -1235,6 +1290,42 @@ Proof.
     exists y;split;eauto.
 Qed.
 Arguments Forall2_nth_error {_ _ _ _ _}.
+
+
+
+Lemma typed_preservation_base_step e e' A:
+  TY ∅ ⊢ e : A →
+  base_step e e' →
+  TY ∅ ⊢ e' : A.
+Proof.
+  intros Hty Hstep.
+  inversion Hstep;subst.
+  inversion Hty;subst;eauto using is_val.
+  inversion H1;subst.
+  inversion H3;subst. (* assignable *)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
