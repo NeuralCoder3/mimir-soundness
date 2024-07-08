@@ -1545,15 +1545,47 @@ Proof.
     (* eapply typed_preservation_base_step;eauto. *)
   - (* App left *)
     (* TODO: if already normalized => split into left and right *)
+    assert(
+      exists Ke2' v2',
+      e'' = App Ke2' v2' /\
+      normal_eval (fill K e2) Ke2' /\
+      normal_eval v2 v2'
+    ) as (Ke2'&v2'&->&HnormKe2&Hnormv2) by admit. 
     econstructor.
+    + eapply IHHty;eauto.
+    + admit. (* assignable, but not IH just step => already normalized *)
+    + admit. (* TODO: norm subst lemma needed (norm in subst in norm => norm) *)
+    (* econstructor.
     2-3: eassumption.
-    eapply IHHty;eauto.
+    eapply IHHty;eauto. *)
   - (* App right *)
+    assert(
+      exists e0' Ke2',
+      e'' = App e0' Ke2' /\
+      normal_eval e0 e0' /\
+      normal_eval (fill K e2) Ke2'
+    ) as (e0'&Ke2'&->&Hnorme0&HnormKe2) by admit.
+    econstructor.
+    + admit. (* TODO: needs e0 already normalized *)
+    + admit. (* assignable + IH *)
+    + admit. (* TODO: complicated => 
+      Problem
+lam y
+
+lam := (λ (n:ℕ) : (Idx n) @ 0_2, 0_n)
+y := ((λ (a:ℕ) : (ℕ) @ 0_2, a+3) 2)
+
+
+or (λ (n:ℕ) : (<<_:n;*>>) @ 0_2, <_:n;ℕ>) y
+=> beta in arg forces beta on type level
+    *)
+  (*
     econstructor.
     2: admit. (* assignable *)
     1: eassumption.
     admit. (* should be IH? *)
-
+  *)
+Admitted.
 
 
 
