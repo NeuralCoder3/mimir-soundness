@@ -1508,6 +1508,143 @@ Proof.
 Admitted.
 
 
+
+Lemma typed_preservation e e' A
+  e'':
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  normal_eval e' e'' →
+  exists A',
+   (* A'',  *)
+    TY ∅ ⊢ e'' : A' ∧
+    rtc (contextual_step) A A'
+    (* normal_eval A' A'' ∧ *)
+    .
+Proof.
+  intros Hty Hstep Hnorm. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  revert e'' Hnorm.
+  dependent induction Hty;eauto.
+  all: intros e'' Hnorm.
+  all: destruct K;simpl in *;try congruence;subst.
+  all: try now inversion Hstep.
+  all: try inversion x;subst.
+  - assert(
+    exists T0' f' U0' Ke2',
+    e'' = Lam x1 T0' f' U0' Ke2' /\
+    normal_eval T0 T0' /\
+    normal_eval U0 U0' /\
+    normal_eval f f' /\
+    normal_eval (fill K e2) Ke2'
+    ) as (T0'&f'&U0'&Ke2'&->&HnormT0&HnormU0&Hnormf&HnormKe2) by admit.
+    replace (Pi x1 T0 U0) with (Pi x1 T0' U0') by admit. (* A already normal form *)
+    eexists. split.
+    1: {
+    (* TODO: alternatively, normalize A *)
+    econstructor.
+    + admit. (* rather replace T0' with T and U0' with U *)
+    + admit. (* TODO: needs context extension *)
+    (* eapply IHHty2. *)
+    + admit. (* assignable induction *)
+    }
+    constructor.
+  - eexists. split.
+    1: {
+    eapply typed_preservation_base_step.
+    2: eassumption.
+    2: eassumption.
+    econstructor;eauto.
+    }
+    constructor.
+  - (* App left *)
+    (* TODO: if already normalized => split into left and right *)
+    assert(
+      exists Ke2' v2',
+      e'' = App Ke2' v2' /\
+      normal_eval (fill K e2) Ke2' /\
+      normal_eval v2 v2'
+    ) as (Ke2'&v2'&->&HnormKe2&Hnormv2) by admit. 
+    (* edestruct (IHHty fill K e2  *)
+    edestruct IHHty as [A' [Hty' Hstep']].
+    5: {
+      replace A' with (Pi x0 T U) in Hty',Hstep' by admit. (* Pi don't step *)
+      eexists. split.
+      1: {
+      econstructor.
+      + eapply Hty'.
+      + admit. (* assignable, but not IH just step => already normalized *)
+      + instantiate (1:=U'). (* well, rather its normal form *)
+        admit. (* TODO: norm subst lemma needed (norm in subst in norm => norm) *)
+      (* econstructor.
+      2-3: eassumption.
+      eapply IHHty;eauto. *)
+      }
+      constructor. (* holds via normalization *)
+    }
+    all: try eassumption.
+    all: reflexivity.
+  - (* App right *)
+    assert(
+      exists e0' Ke2',
+      e'' = App e0' Ke2' /\
+      normal_eval e0 e0' /\
+      normal_eval (fill K e2) Ke2'
+    ) as (e0'&Ke2'&->&Hnorme0&HnormKe2) by admit.
+    edestruct IHHty as [A' [Hty' Hstep']].
+    5: {
+      replace A' with (Pi x0 T U) in Hty',Hstep' by admit.
+    eexists. split.
+    1: {
+    econstructor.
+    + admit. (* TODO: needs e0 already normalized *)
+    + constructor.
+      apply Hty'.
+     (* assignable + IH *)
+    + admit. 
+    }
+    admit.
+    }
+    4: eassumption.
+    2: admit.
+    all: try eassumption.
+    all: reflexivity.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Lemma typed_preservation e e' A
   e'':
   TY ∅ ⊢ e : A →
