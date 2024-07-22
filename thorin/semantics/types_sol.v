@@ -1,6 +1,6 @@
 From stdpp Require Import base relations.
 From iris Require Import prelude.
-From thorin.lib Require Import maps.
+(* From thorin.lib Require Import maps. *)
 From thorin Require Import lang notation.
 Require Import Coq.Program.Equality.
 (* From Autosubst Require Export Autosubst. *)
@@ -20,6 +20,30 @@ Require Import Coq.Program.Equality.
   Usually, the typing is annotated with the type level in the presence of indices
   and lifting lemmas are defined
 *)
+
+(* From stdpp Require Export relations orders.
+From thorin.lib Require Export sets.
+From stdpp Require Import gmap.
+Section map.
+  (* keys need to be countable, i.e., have an injection into positive integers *)
+  Context {K} {A B : Type} `{Countable K}.
+(* Definition gmap (K V:Type) `{Countable K} := list (K*V). *)
+  Definition gmap := list (A*B).
+
+(* Definition lookup (k:K) m : option B :=
+  snd <$> list_find (λ '(k',_), k = k') m. *)
+
+Notation "Γ !! x" := (lookup x Γ) (at level 20).
+Notation "Γ ⊆ Δ" := (forall x A, Γ !! x = Some A → Δ !! x = Some A) (at level 70).
+(* Notation "<[ x := y ]> Γ" := (assoc_replace x y Γ) (at level 10). *)
+Notation "<[ x := y ]> Γ" := ((x,y)::Γ) (at level 10).
+Notation "x ∈ Γ" := (is_Some (Γ !! x)) (at level 70).
+(* Notation "f <$> Γ" := (map (λ '(x, y), (x, f y)) Γ) (at level 61 with arguments constr at level 61). *)
+(* Notation "f <$> Γ" := (map (λ '(x, y), (x, f y)) Γ) (at level 61, Γ at level 61). *)
+Definition fmap {A B} (f: A -> B) Γ : gmap string B :=
+  map (λ '(x, y), (x, f y)) Γ.
+Infix "<$>" := fmap (at level 61, left associativity). *)
+
 
 Definition typing_context := gmap string expr.
 Implicit Types
@@ -56,7 +80,7 @@ Tj' = Tj[e#0_n/x0]...[e#(j-1)_n/x_(j-1)] (j < n)
 
 Note: we use Function instead of Program Fixpoint for the _equation lemma
 *)
-Fixpoint close_subst_aux (e:expr) (n:nat) (Ts: list ((binder*expr)*Fin.t n)) 
+(* Fixpoint close_subst_aux (e:expr) (n:nat) (Ts: list ((binder*expr)*Fin.t n)) 
   : list expr :=
   match Ts with
   | [] => []
@@ -77,7 +101,7 @@ Definition close_subst e n Ts :=
 Definition extracts n e :=
   let (idxs, _) := fin_list n in
   map (fun idx => Extract e (LitIdx n idx)) idxs
-  .
+  . *)
 
 Definition Star := Sort 0.
 Definition insert_name (x: binder) (e: expr) (Γ: typing_context) :=
@@ -142,6 +166,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY (insert_name x T Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       type_assignable (insert_name x T Γ) U e →
+      (* without tuples, assignable becomes typed *)
+      (* TY (insert_name x T Γ) ⊢ e : U → *)
       TY Γ ⊢ (Lam x T ef U e) : (Pi x T U)
     (* | typed_lam_anon Γ T ef U e sT sU:
       TY Γ ⊢ T : sT →
@@ -154,6 +180,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
       type_assignable Γ T eT →
+      (* without tuples, assignable becomes typed *)
+      (* TY Γ ⊢ eT : T → *)
       normal_eval (subst' x eT U) U' →
       TY Γ ⊢ (App e eT) : U'
     (*
@@ -164,7 +192,7 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       of pairwise domainance
     *)
     (* TODO: mistake in pdf (n-2 in assumption) *)
-    | typed_sigma_empty Γ:
+    (* | typed_sigma_empty Γ:
       TY Γ ⊢ Sigma [] : Star
     | typed_sigma_cons Γ x T s xs s' :
       TY Γ ⊢ T : Sort s →
@@ -225,14 +253,14 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       normal_eval (Tuple Ts'') T →
       TY Γ ⊢ T : s ->
       normal_eval (Extract T ei) U ->
-      TY Γ ⊢ (Extract e ei) : U
+      TY Γ ⊢ (Extract e ei) : U *)
 
 with type_assignable : typing_context -> expr -> expr -> Prop :=
   | assignable_typed Γ e T:
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
       type_assignable Γ T e
-  | assignable_sigma Γ n Ts Ts'' e:
+  (* | assignable_sigma Γ n Ts Ts'' e:
       (* 
         TODO:
         e#in is assignable to T_i under subst for all previous e
@@ -243,7 +271,7 @@ with type_assignable : typing_context -> expr -> expr -> Prop :=
       (* Note: extracts can not be inlined, it need intransparency *)
       let es' := extracts n e in
       Forall2 (type_assignable Γ) Ts'' es' ->
-      type_assignable Γ (Sigma Ts) e
+      type_assignable Γ (Sigma Ts) e *)
 where "'TY' Γ ⊢ e : A" := (syn_typed Γ e%E A%E)
 (* and "'TY' Γ ⊢ A ← e" := (type_assignable Γ A%E e%E) *)
 .
@@ -404,6 +432,7 @@ Proof.
     econstructor; eauto.
     eapply H0. destruct x;simpl;eauto using insert_mono. 
   - (* lam *) econstructor;destruct x; eauto using insert_mono.
+  (*
   - (* sigma *)
     econstructor;destruct x;eauto using insert_mono.
   - (* Tuple *)
@@ -417,15 +446,19 @@ Proof.
     econstructor; eauto.
     apply H0.
     destruct x; eauto using insert_mono.
+  *)
   - (* assignable *)
     constructor;eauto.
+  (*
   - (* assignable Sigma *)
     subst; subst Ts' es'.
     eapply assignable_sigma.
     2: eassumption.
     + reflexivity.
     + admit. (* needs nested induction *)
-Admitted.
+  *)
+(* Admitted. *)
+Qed.
 
 Corollary typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
@@ -633,6 +666,170 @@ Proof.
 Qed.
 
 
+(* Definition eq1 Γ Γ' f := forall x v, Γ !! x = Some v <-> (exists k, Γ' !! x = Some k /\ normal_eval (f v) k).
+Definition eq2 Γ Γ' f := forall x v', (exists v, Γ !! x = Some v /\ normal_eval (f v) v') <-> Γ' !! x = Some v'.
+
+Goal ∀ Γ Γ' f, eq1 Γ Γ' f <-> eq2 Γ Γ' f.
+Proof.
+  intros Γ Γ' f.
+  split;intros H.
+  - intros x v'. split.
+    + intros [v [H1 H2]]. apply H in H1 as [k [H3 H4]]. rewrite H3.
+      admit. (* confluence normal_eval *)
+    + intros H1. 
+      unfold eq1 in H.
+      (* totality of normal_eval *)
+      assert (exists v'' *)
+
+      (* Print gmap.gmap.
+      Print pmap.Pmap. *)
+
+
+Lemma typed_substitutivity e e' Γ (a: binder) A B 
+  Γ' e'_norm B'_norm:
+  TY ∅ ⊢ e' : A →
+  TY (insert_name a A Γ) ⊢ e : B →
+  normal_eval (lang.subst' a e' e) e'_norm →
+  normal_eval (lang.subst' a e' B) B'_norm →
+  (* TY (<[a := A]> Γ) ⊢ e : B →
+  normal_eval (lang.subst a e' e) e'_norm →
+  normal_eval (lang.subst a e' B) B'_norm → *)
+  (* Forall2 normal_eval (subst a e' <$> Γ) Γ' → *)
+  (*
+
+  *)
+  (forall x v,
+    Γ !! x = Some v <-> (exists k, Γ' !! x = Some k /\ normal_eval (subst' a e' v) k)) ->
+    (* /\ Γ' !! x = Some v -> (exists k, Γ' !! x = Some k /\ normal_eval (subst' a e' v) k) -> *)
+  TY Γ' ⊢ e'_norm : B'_norm.
+Proof.
+  assert (lang.subst' a e' A = A) as HsubstA by admit.
+  intros He' H Hnorme HnormB HΓ.
+  (* 
+  induction e + inversion lemmas alone are not enough due to dependencies
+  subst B : ... is missing => needs hypothesis 
+  *)
+  (* dependent induction H in e'_norm B'_norm Hnorme HnormB |- *;simpl;eauto. *)
+  revert Γ' e'_norm B'_norm Hnorme HnormB HΓ.
+  dependent induction H;simpl;eauto.
+  all: intros Γ' e'_norm B'_norm Hnorme HnormB HΓ.
+  - (* Sort *)
+    replace e'_norm with (Sort n) by admit.
+    replace B'_norm with (Sort (S n)) by admit.
+    econstructor.
+  - (* Bot *)
+    replace e'_norm with Bot by admit.
+    replace B'_norm with Star by admit.
+    econstructor.
+  - (* Nat *)
+    replace e'_norm with Nat by admit.
+    replace B'_norm with Star by admit.
+    econstructor.
+  - (* Idx *)
+    replace e'_norm with Idx by admit.
+    replace B'_norm with (Pi BAnon Nat Star) by admit.
+    econstructor.
+  - (* LitNat *)
+    replace e'_norm with (#n)%E by admit.
+    replace B'_norm with Nat by admit.
+    econstructor.
+  - (* LitIdx *)
+    replace e'_norm with (LitIdx n i) by admit.
+    replace B'_norm with (App Idx n) by admit.
+    econstructor.
+  - (* Var *)
+    replace e'_norm with (Var x) by admit.
+    (* needs Environment normalized *)
+    (* replace B'_norm with A0 by admit.  *)
+    econstructor.
+    admit. (* relate Γ and Γ' *)
+  - (* Pi *)
+    replace (subst' a e' (Pi x T U)) with (Pi x (subst' a e' T) (subst' a e' U)) in Hnorme by admit.
+    (* destruct decide in Hnorme;[admit|]. *)
+    assert(
+      exists T' U',
+      e'_norm = Pi x T' U' /\
+      normal_eval (subst' a e' T) T' /\
+      normal_eval (subst' a e' U) U'
+    ) as [T' [U' [He'_norm [HnormT HnormU]]]] by admit.
+    subst.
+    simpl in HnormB.
+    replace (B'_norm) with (LitNat(max sT sU)) by admit.
+    econstructor.
+    + eapply IHsyn_typed1.
+      4: eapply HnormT.
+      4: admit. (* Sort norm *)
+      2: eassumption.
+      1: eassumption.
+      reflexivity.
+      eassumption.
+    + eapply IHsyn_typed2.
+      4: eassumption.
+      4: admit. (* Sort norm *)
+      1-2: eassumption.
+      admit. (* different order insert *)
+      (* eassumption. *)
+      admit. (* Γ' *)
+  - (* Lambda *)
+    replace (subst' a e' (Lam x T ef U e)) with (Lam x (subst' a e' T) (subst' a e' ef) (subst' a e' U) (subst' a e' e)) in Hnorme by admit.
+    pose proof HnormB as HnormB2.
+    replace (subst' a e' (Pi x T U)) with (Pi x (subst' a e' T) (subst' a e' U)) in HnormB2 by admit.
+    assert(
+      exists T' U' ef' e'',
+      e'_norm = Lam x T' ef' U' e'' /\
+      normal_eval (subst' a e' T) T' /\
+      normal_eval (subst' a e' ef) ef' /\
+      normal_eval (subst' a e' U) U'
+    ) as [T' [U' [ef' [e'' [He'_norm [HnormT [Hnormef HnormU]]]]]]] by admit.
+    subst.
+    assert(
+      exists T'' U'',
+      B'_norm = Pi x T'' U'' /\
+      normal_eval (subst' a e' T) T'' /\
+      normal_eval (subst' a e' U) U''
+    ) as [T'' [U'' [HB'_norm [HnormT' HnormU']]]] by admit.
+    subst.
+    (* confluence of normalize *)
+    assert (T' = T'') as -> by admit.
+    assert (U' = U'') as -> by admit. 
+    econstructor.
+    + eapply IHsyn_typed1.
+      4: eapply HnormB.
+      3: reflexivity.
+      1-2: eassumption.
+      admit. (* TODO: where does s come from *)
+      eassumption.
+    + eapply IHsyn_typed2.
+      4: eassumption.
+      1-2: eassumption.
+      1: admit. (* insert order *)
+      admit. (* bool norm bool *)
+      admit. (* Γ' *)
+    + admit. (* TODO: assignability induction *)
+  - (* App *)
+    admit. (* TODO *)
+Admitted.
+
+
+(* Corollary typed_substitutivity' e e' Γ (a: binder) A B 
+  Γ' e'_norm B'_norm:
+  TY ∅ ⊢ e' : A →
+  TY (insert_name a A Γ) ⊢ e : B →
+  normal_eval (lang.subst' a e' e) e'_norm →
+  normal_eval (lang.subst' a e' B) B'_norm →
+  Γ' = (subst' a e') <$> Γ →
+  TY Γ' ⊢ e'_norm : B'_norm.
+Proof.
+  intros.
+  destruct a.
+  - simpl in *;subst.
+    admit. (* normalization preserves types *)
+    (* TODO: is already normalized *)
+  - subst. simpl. eapply typed_substitutivity;eauto.
+Admitted. *)
+
+
+
 (*
 Substitution lemmas
 |- e' : A
@@ -645,7 +842,7 @@ Note: Importantly, we need to substitute in the type as well as it might contain
 Also see page 55 in
 https://hbr.github.io/Lambda-Calculus/cc-tex/cc.pdf
 *)
-Lemma typed_substitutivity e e' Γ (a: string) A B :
+(* Lemma typed_substitutivity e e' Γ (a: string) A B :
   TY ∅ ⊢ e' : A →
   TY (<[a := A]> Γ) ⊢ e : B →
   (* TODO: replace in Gamma/ use Γ, x:A, Δ  (some common prefix of all typing derivations here) *)
@@ -794,7 +991,7 @@ Proof.
       eapply IHsyn_typed3;eauto.
     }
     all: admit. (* normalize under subst TODO: with additional normalize *)
-Admitted.
+Admitted. *)
 
 
 
@@ -874,8 +1071,13 @@ Lemma canonical_value_idx Γ e (n:nat):
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
+  inversion H;subst.
+  simpl in H1.
+  admit. (* Star does not normalize to Idx *)
+  (* 
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Idx) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
 (*
@@ -883,7 +1085,7 @@ Admitted.
   There is no invalid extract.
   Especially, we never can extract from an empty tuple
 *)
-Example untyped_empty_extract:
+(* Example untyped_empty_extract:
     (* we might as well assume ei is a value
       (by soundess, we can evaluate to a value)
     *)
@@ -932,7 +1134,7 @@ Proof.
     simpl in H3.
     pose proof (canonical_value_idx _ _ _ H3 Hv) as [i ->].
     inversion i.
-Admitted.
+Admitted. *)
 
 Lemma canonical_value_pi Γ e x T U:
   TY Γ ⊢ e : Pi x T U →
@@ -940,16 +1142,20 @@ Lemma canonical_value_pi Γ e x T U:
   
   (e = Idx ∧ x = BAnon /\ T = Nat ∧ U = Star) ∨
   exists f ef, 
-    (e = Lam x T f U ef ∧ is_val T).
+    (e = Lam x T f U ef).
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst;try no_nonsense_canonical.
+  inversion H;subst.
+  admit. (* Star does not normalize to Pi *)
+  (*
   - (* lambda named *)
     right. eauto.
   - (* lambda anon *)
     right. eauto.
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Pi) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
 Lemma canonical_value_nat Γ e:
@@ -960,11 +1166,15 @@ Lemma canonical_value_nat Γ e:
 Proof.
   intros Hty Hv.
   inversion Hty;subst;try naive_solver;inversion Hv;subst; try no_nonsense_canonical.
+  inversion H;subst.
+  admit. (* Star does not normalize to Nat *)
+  (*
   - exfalso. admit. (* Sigma will only every normalize to Sigma (not Nat) *)
   - exfalso. admit. (* Same with Array *)
+  *)
 Admitted.
 
-Lemma canonical_value_sigma Γ e Ts:
+(* Lemma canonical_value_sigma Γ e Ts:
   TY Γ ⊢ e : Sigma Ts →
   is_val e ->
   
@@ -1001,7 +1211,7 @@ Proof.
     do 2 eexists;f_equal;eauto.
     pose proof (canonical_value_nat _ _ H H3) as [n ->].
     admit. (* TODO: need that normalization Array to Sigma preserves length *)
-Admitted.
+Admitted. *)
 
 
 (* Definition add_binder x e Γ := 
@@ -1013,7 +1223,7 @@ Transparent add_binder. *)
 
 
 (* TODO: this changes with normalization *)
-Lemma canonical_value_array Γ e x en T:
+(* Lemma canonical_value_array Γ e x en T:
   TY Γ ⊢ e : Array x en T ->
   is_val e ->
   
@@ -1036,7 +1246,7 @@ Proof.
     *)
   - (* Pack anon *)
     eauto 10.
-Admitted.
+Admitted. *)
 
 
 
@@ -1051,18 +1261,51 @@ e is a value or
 exists e' s.t. e -> e'
 *)
 
+(*
+  we now go under binder => need Γ
+*)
+
 Lemma typed_progress_mut:
   (* everything except var works out with Γ instead of ∅ *)
   (forall Γ e A (H:TY Γ ⊢ e : A),
-    Γ = ∅ ->
+    (* Γ = ∅ -> *)
+    (* (exists x, e = Var x) \/ *)
     is_val e ∨ reducible e) /\
   (forall Γ A e (H:type_assignable Γ A e),
-    Γ = ∅ ->
+    (* Γ = ∅ -> *)
     is_val e ∨ reducible e).
 Proof.
   eapply typed_ind;intros;subst;eauto 10 using is_val.
+  (* 
   - (* var *)
-    inversion e.
+    (* inversion e. *)
+    left. constructor.
+  *)
+  - (* Lambda *)
+    destruct H1 as [HvalT|[? ?]].
+    + left. now constructor.
+    + right. eexists. eauto.
+      (* destruct H1 as [e' [K ? ? -> -> Hstep]].
+      eexists.
+      eapply Ectx_step with (K:= LamCtx x T ef U K);eauto. *)
+  - (* App *)
+    destruct H.
+    + destruct H0.
+      * (* canonical value *)
+        specialize (canonical_value_pi _ _ _ _ _ s H) as [(->&->&->&->)|(f&ef&->)].
+        -- (* canonical value Idx *)
+          inversion t;subst.
+          specialize (canonical_value_nat _ _ H1 H0) as [m ->].
+          left. constructor.
+        -- right.
+          eexists. eapply base_contextual_step.
+          eapply BetaS. reflexivity.
+      * right. destruct H0.
+        eexists. eauto.
+    + right. destruct H.
+      eexists. eauto.
+Qed.
+(*
   - (* pi *)
     destruct H;eauto.
     + left. now constructor.
@@ -1204,7 +1447,7 @@ Proof.
       is_val e' ∨ reducible e'
     *)
 Admitted.
-
+*)
 
 Corollary typed_progress e A:
   (* everything except var works out with Γ instead of ∅ *)
@@ -1235,6 +1478,272 @@ Proof.
     exists y;split;eauto.
 Qed.
 Arguments Forall2_nth_error {_ _ _ _ _}.
+
+
+
+Lemma typed_preservation_base_step e e' A
+  e'_norm:
+  TY ∅ ⊢ e : A →
+  base_step e e' →
+  normal_eval e' e'_norm →
+  TY ∅ ⊢ e'_norm : A.
+Proof.
+  intros Hty Hstep Hnorm.
+  inversion Hstep;subst.
+  inversion Hty;subst;eauto using is_val.
+  inversion H1;subst.
+  inversion H3;subst. (* assignable *)
+
+  (* replace (TY ∅ ⊢ e'_norm : A) with (TY subst' x0 earg <$> ∅ ⊢ e'_norm : A).
+  2: admit. *)
+  (* replace (∅) with (subst' x0 earg <$> ∅). *)
+  eapply typed_substitutivity.
+  3-4: eassumption.
+  1: eassumption.
+  inversion H13;subst.
+  1: eassumption.
+  admit. (* simple *)
+  (* now rewrite fmap_empty. *)
+(* Qed. *)
+Admitted.
+
+
+
+Lemma typed_preservation e e' A
+  e'':
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  normal_eval e' e'' →
+  exists A',
+   (* A'',  *)
+    TY ∅ ⊢ e'' : A' ∧
+    rtc (contextual_step) A A'
+    (* normal_eval A' A'' ∧ *)
+    .
+Proof.
+  intros Hty Hstep Hnorm. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  revert e'' Hnorm.
+  dependent induction Hty;eauto.
+  all: intros e'' Hnorm.
+  all: destruct K;simpl in *;try congruence;subst.
+  all: try now inversion Hstep.
+  all: try inversion x;subst.
+  - assert(
+    exists T0' f' U0' Ke2',
+    e'' = Lam x1 T0' f' U0' Ke2' /\
+    normal_eval T0 T0' /\
+    normal_eval U0 U0' /\
+    normal_eval f f' /\
+    normal_eval (fill K e2) Ke2'
+    ) as (T0'&f'&U0'&Ke2'&->&HnormT0&HnormU0&Hnormf&HnormKe2) by admit.
+    replace (Pi x1 T0 U0) with (Pi x1 T0' U0') by admit. (* A already normal form *)
+    eexists. split.
+    1: {
+    (* TODO: alternatively, normalize A *)
+    econstructor.
+    + admit. (* rather replace T0' with T and U0' with U *)
+    + admit. (* TODO: needs context extension *)
+    (* eapply IHHty2. *)
+    + admit. (* assignable induction *)
+    }
+    constructor.
+  - eexists. split.
+    1: {
+    eapply typed_preservation_base_step.
+    2: eassumption.
+    2: eassumption.
+    econstructor;eauto.
+    }
+    constructor.
+  - (* App left *)
+    (* TODO: if already normalized => split into left and right *)
+    assert(
+      exists Ke2' v2',
+      e'' = App Ke2' v2' /\
+      normal_eval (fill K e2) Ke2' /\
+      normal_eval v2 v2'
+    ) as (Ke2'&v2'&->&HnormKe2&Hnormv2) by admit. 
+    (* edestruct (IHHty fill K e2  *)
+    edestruct IHHty as [A' [Hty' Hstep']].
+    5: {
+      replace A' with (Pi x0 T U) in Hty',Hstep' by admit. (* Pi don't step *)
+      eexists. split.
+      1: {
+      econstructor.
+      + eapply Hty'.
+      + admit. (* assignable, but not IH just step => already normalized *)
+      + instantiate (1:=U'). (* well, rather its normal form *)
+        admit. (* TODO: norm subst lemma needed (norm in subst in norm => norm) *)
+      (* econstructor.
+      2-3: eassumption.
+      eapply IHHty;eauto. *)
+      }
+      constructor. (* holds via normalization *)
+    }
+    all: try eassumption.
+    all: reflexivity.
+  - (* App right *)
+    assert(
+      exists e0' Ke2',
+      e'' = App e0' Ke2' /\
+      normal_eval e0 e0' /\
+      normal_eval (fill K e2) Ke2'
+    ) as (e0'&Ke2'&->&Hnorme0&HnormKe2) by admit.
+    edestruct IHHty as [A' [Hty' Hstep']].
+    5: {
+      replace A' with (Pi x0 T U) in Hty',Hstep' by admit.
+    eexists. split.
+    1: {
+    econstructor.
+    + admit. (* TODO: needs e0 already normalized *)
+    + constructor.
+      apply Hty'.
+     (* assignable + IH *)
+    + admit. 
+    }
+    admit.
+    }
+    4: eassumption.
+    2: admit.
+    all: try eassumption.
+    all: reflexivity.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Lemma typed_preservation e e' A
+  e'':
+  TY ∅ ⊢ e : A →
+  contextual_step e e' →
+  normal_eval e' e'' →
+  TY ∅ ⊢ e'' : A.
+Proof.
+  intros Hty Hstep Hnorm. destruct Hstep as [K e1 e2 -> -> Hstep].
+
+  revert e'' Hnorm.
+  dependent induction Hty;eauto.
+  all: intros e'' Hnorm.
+  all: destruct K;simpl in *;try congruence;subst.
+  all: try now inversion Hstep.
+  all: try inversion x;subst.
+  - assert(
+    exists T0' f' U0' Ke2',
+    e'' = Lam x1 T0' f' U0' Ke2' /\
+    normal_eval T0 T0' /\
+    normal_eval U0 U0' /\
+    normal_eval f f' /\
+    normal_eval (fill K e2) Ke2'
+    ) as (T0'&f'&U0'&Ke2'&->&HnormT0&HnormU0&Hnormf&HnormKe2) by admit.
+    replace (Pi x1 T0 U0) with (Pi x1 T0' U0') by admit. (* A already normal form *)
+    (* TODO: alternatively, normalize A *)
+    econstructor.
+    + admit. (* rather replace T0' with T and U0' with U *)
+    + admit. (* TODO: needs context extension *)
+    (* eapply IHHty2. *)
+    + admit. (* assignable induction *)
+  - eapply typed_preservation_base_step.
+    2: eassumption.
+    (*  *)
+    all: admit.
+    (* eapply typed_preservation_base_step;eauto. *)
+  - (* App left *)
+    (* TODO: if already normalized => split into left and right *)
+    assert(
+      exists Ke2' v2',
+      e'' = App Ke2' v2' /\
+      normal_eval (fill K e2) Ke2' /\
+      normal_eval v2 v2'
+    ) as (Ke2'&v2'&->&HnormKe2&Hnormv2) by admit. 
+    econstructor.
+    + eapply IHHty;eauto.
+    + admit. (* assignable, but not IH just step => already normalized *)
+    + admit. (* TODO: norm subst lemma needed (norm in subst in norm => norm) *)
+    (* econstructor.
+    2-3: eassumption.
+    eapply IHHty;eauto. *)
+  - (* App right *)
+    assert(
+      exists e0' Ke2',
+      e'' = App e0' Ke2' /\
+      normal_eval e0 e0' /\
+      normal_eval (fill K e2) Ke2'
+    ) as (e0'&Ke2'&->&Hnorme0&HnormKe2) by admit.
+    econstructor.
+    + admit. (* TODO: needs e0 already normalized *)
+    + admit. (* assignable + IH *)
+    + admit. (* TODO: complicated => 
+      Problem
+lam y
+
+lam := (λ (n:ℕ) : (Idx n) @ 0_2, 0_n)
+y := ((λ (a:ℕ) : (ℕ) @ 0_2, a+3) 2)
+
+
+or (λ (n:ℕ) : (<<_:n;*>>) @ 0_2, <_:n;ℕ>) y
+=> beta in arg forces beta on type level
+    *)
+  (*
+    econstructor.
+    2: admit. (* assignable *)
+    1: eassumption.
+    admit. (* should be IH? *)
+  *)
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3420,3 +3929,4 @@ Lemma typed_tapp' n Γ A B C e :
 Proof.
  intros; subst C; by eapply typed_tapp.
 Qed.
+KK

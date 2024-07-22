@@ -18,7 +18,7 @@ Notation "# l" := (LitNat l) (at level 8, format "# l") : expr_scope.
 
 (** Syntax inspired by Coq/Ocaml. Constructions with higher precedence come
     first. *)
-Notation "#( e1 , e2 , .. , en )" := (Tuple (cons e1%E (cons e2%E .. (cons en%E nil) ..))) : expr_scope.
+(* Notation "#( e1 , e2 , .. , en )" := (Tuple (cons e1%E (cons e2%E .. (cons en%E nil) ..))) : expr_scope. *)
 (* Check (#3, #4, #5)%E. *)
 
 (* Notation "'match:' e0 'with' 'InjL' x1 => e1 | 'InjR' x2 => e2 'end'" :=

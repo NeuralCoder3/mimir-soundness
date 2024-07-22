@@ -312,7 +312,13 @@ Inductive normalize_step : expr -> expr -> Prop :=
   (* | normalize_tuple_pack x n e:
     normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
   | normalize_sigma_array x n T:
-    normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T))) *)
+    normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T)))
+
+  (* TODO: not in paper *)
+  | normalize_pack_one e:
+    normalize_step (Pack BAnon (LitNat 1) e) e
+  | normalize_array_one T:
+    normalize_step (Array BAnon (LitNat 1) T) T *)
 .
 
 (* TODO: do we need to require left-to-right or in-to-out order? *)
@@ -467,6 +473,67 @@ Inductive normalized : expr -> Prop :=
     ~ (exists es idx, e = Tuple es /\ ei = LitIdx (length es) idx) ->
     ~ (exists en eb, e = Pack BAnon en eb) ->
     normalized (Extract e ei) *)
+  .
+(* TODO:
+  enumerate full constructive (as far as possible) normalized predicate
+  TODO: not up to date
+
+
+  we define is_val for normalized expressions => does not contain a beta redex
+  we do not go into types of dependencies (only decent along evaluation contexts)
+  but we descend under binders
+
+  applications and extracts are not values
+*)
+Inductive is_val : expr → Prop :=
+(* with is_val : expr → Prop := *)
+  (* atomic values *)
+  (* | StarV : is_val Star
+  | BoxV : is_val Box *)
+  | VarV x : is_val (Var x) (* or talk about closed for preservation *)
+  | SortV n : is_val (Sort n)
+  | BotV : is_val Bot
+  | NatV : is_val Nat
+  | IdxV : is_val Idx
+  (* TODO: is (Idx n) a value? if not what does it reduce to *)
+  | IdxAppV n : is_val (App Idx (LitNat n))
+  | LitNatV n : is_val (LitNat n)
+  | LitIdxV n i : is_val (LitIdx n i)
+  | PiV x T U : 
+    (* is_val T → *)
+    is_val (Pi x T U)
+  | LamV x T f U e : 
+    (* TODO: should this be value or normalized?
+    => we step not in the type
+    => normalization already sufficient for value
+     *)
+    (* is_val T → *)
+    (* normalized T → *)
+    (* U might depend on x:T *)
+    is_val e ->
+    is_val (Lam x T f U e)
+  (* compound values *)
+  (* 
+    sigma is like lambda (functions depending on previous values)
+    => only the first one should be a val
+  *)
+  (* | SigmaV xs: is_val (Sigma xs)
+  (* | SigmaEmptyV: is_val (Sigma [])
+  (* we do not need to test the rest => (implicitely) depends on first one *)
+  | SigmaConsV x T args : 
+    (* same as lambda *)
+    (* is_val T →  *)
+    (* normalized T → *)
+    is_val (Sigma ((x, T) :: args)) *)
+  | TupleV es : Forall is_val es → is_val (Tuple es)
+  | ArrayV x en T : 
+    (* is_val en →
+    is_val T → *)
+    is_val (Array x en T)
+  | PackV x en e :
+    is_val en →
+    is_val e →
+    is_val (Pack x en e) *)
   .
 
 Lemma normalized_sound e:
@@ -655,47 +722,80 @@ Inductive ectx :=
   (* the filter depends on the argument *)
   | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr)
   | AppLCtx (K: ectx) (v2 : expr)
-  | AppRCtx (e1 : expr) (K: ectx) (H: is_val e1)
+  | AppRCtx (e1 : expr) (K: ectx) 
+  (* (H: is_val e1) *)
   (* only first argument in sigma *)
-  (* | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr))
-  | TupleCtx (es1:list expr) (K: ectx) (es2: list expr) (H: Forall is_val es1)
+  (* | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr)) *)
+    (* (H: Forall is_val es1) *)
+  (* | TupleCtx (es1:list expr) (K: ectx) (es2: list expr) 
   (* only en is up to be a context *)
   | ArrayCtx (x:binder) (K: ectx) (T:expr)
   | PackCtx (x:binder) (K: ectx) (e:expr)
   | ExtractLCtx (K: ectx) (ei:expr)
-  | ExtractRCtx (e:expr) (K: ectx) (H: is_val e) *)
+ (* (H: is_val e) *)
+  | ExtractRCtx (e:expr) (K: ectx) *)
+  (*
+  TODO: nothing in types? Even toplevel
+  => array, Pi, Sigma
+  *)
   .  
 
 (* Place an expression into the hole of a context *)
-Fixpoint fill (K : ectx) (e : expr) : expr :=
+(* Fixpoint fill (K : ectx) (e : expr) : expr :=
   match K with
   | HoleCtx => e
   | PiCtx x K U => Pi x (fill K e) U
   | LamCtx x K f U eb => Lam x (fill K e) f U eb
   | AppLCtx K v2 => App (fill K e) v2
-  | AppRCtx e1 K _ => App e1 (fill K e)
+  | AppRCtx e1 K _ => App e1 (fill K e) *)
   (* | SigmaCtx x K args => Sigma ((x, fill K e) :: args)
   | TupleCtx es1 K es2 _ => Tuple (es1 ++ fill K e :: es2)
   | ArrayCtx x K T => Array x (fill K e) T
   | PackCtx x K eb => Pack x (fill K e) eb
   | ExtractLCtx K ei => Extract (fill K e) ei
-  | ExtractRCtx eb K _ => Extract eb (fill K e) *)
+  | ExtractRCtx eb K _ => Extract eb (fill K e)
+  end. *)
+Fixpoint fill (K : ectx) (e : expr) : expr :=
+  match K with
+  | HoleCtx => e
+  | LamCtx x T f U K => Lam x T f U (fill K e)
+  | AppLCtx K v2 => App (fill K e) v2
+  (* | AppRCtx e1 K H => App e1 (fill K e) *)
+  | AppRCtx e1 K => App e1 (fill K e)
+  (* | TupleCtx es1 K es2 => Tuple (es1 ++ fill K e :: es2)
+  | PackLCtx x K eb => Pack x (fill K e) eb
+  | PackRCtx x en K => Pack x en (fill K e)
+  | ExtractLCtx K ei => Extract (fill K e) ei
+  | ExtractRCtx eb K => Extract eb (fill K e) *)
   end.
 
 (* Compose two evaluation contexts => place the second context into the hole of the first *)
-Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
+(* Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   match K1 with
   | HoleCtx => K2
   | PiCtx x K U => PiCtx x (comp_ectx K K2) U
   | LamCtx x K f U e => LamCtx x (comp_ectx K K2) f U e
   | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
-  | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H
+  | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H *)
   (* | SigmaCtx x K args => SigmaCtx x (comp_ectx K K2) args
   | TupleCtx es1 K es2 H => TupleCtx es1 (comp_ectx K K2) es2 H
   | ArrayCtx x K T => ArrayCtx x (comp_ectx K K2) T
   | PackCtx x K e => PackCtx x (comp_ectx K K2) e
   | ExtractLCtx K ei => ExtractLCtx (comp_ectx K K2) ei
-  | ExtractRCtx e K H => ExtractRCtx e (comp_ectx K K2) H *)
+  | ExtractRCtx e K H => ExtractRCtx e (comp_ectx K K2) H
+  end. *)
+Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
+  match K1 with
+  | HoleCtx => K2
+  | LamCtx x T f U K => LamCtx x T f U (comp_ectx K K2)
+  | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
+  (* | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H *)
+  | AppRCtx e1 K => AppRCtx e1 (comp_ectx K K2)
+  (* | TupleCtx es1 K es2 => TupleCtx es1 (comp_ectx K K2) es2
+  | PackLCtx x K eb => PackLCtx x (comp_ectx K K2) eb
+  | PackRCtx x en K => PackRCtx x en (comp_ectx K K2)
+  | ExtractLCtx K ei => ExtractLCtx (comp_ectx K K2) ei
+  | ExtractRCtx eb K => ExtractRCtx eb (comp_ectx K K2) *)
   end.
 
 (** Contextual steps => lift reductions via contexts *)
@@ -737,16 +837,70 @@ Proof.
   destruct H as [K e1 e2 -> -> Hred].
   induction K;simpl in Hv;inversion Hv;subst;try congruence.
   all: try (now inversion Hred).
+  - destruct K; simpl in *;inversion H0;subst.
+    now contradict IHK.
+  - (* Idx #n, Idx -> ... *)
+    destruct K;simpl in *;inversion H1;subst.
+    inversion Hred.
+    (*
+  - (* Idx #n, #n -> ... *)
+    destruct K;simpl in H2;inversion H2;subst.
+    inversion Hred.
+ *)
+  (* - apply Forall_app in H0 as [H1 H2].
+    inversion H2;subst.
+    congruence. *)
+Qed.
+
+
+(*
+  assume typed and normalized
+*)
+Lemma characterize_value e:
+  ¬ reducible e → is_val e.
+Proof.
+  intros H.
+  induction e;try now econstructor.
+  (* - admit. (* var -- ruled out by typed *) *)
+  - econstructor.
+    apply IHe4.
+    contradict H.
+    destruct H as [ebody' H].
+    destruct H as [K e1' e2' -> -> Hred].
+    eexists. 
+    eapply Ectx_step with (K:=LamCtx x e1 e2 e3 K);eauto.
+  - contradict H.
+    (* app *)
+    (* if typed and normalized => lambda => makes an app step *)
+    admit.
+  (* - admit. (* nested induction *)
+  - (* pack *)
+    admit.
+  - (* extract *)
+    (* if normalized (and typed), all extracts are evaluated *)
+    admit. *)
+Abort.
+
+
+(* TODO: we want is_val <-> ~ reducibile *)
+(* Lemma values_dont_reduce e:
+  is_val e → ¬ reducible e.
+Proof.
+  intros Hv Hred.
+  destruct Hred.
+  destruct H as [K e1 e2 -> -> Hred].
+  induction K;simpl in Hv;inversion Hv;subst;try congruence.
+  all: try (now inversion Hred).
   - (* Idx #n, Idx -> ... *)
     destruct K;simpl in *;inversion H0;subst.
     inversion Hred.
   - (* Idx #n, #n -> ... *)
     destruct K;simpl in H2;inversion H2;subst.
     inversion Hred.
-  (* - apply Forall_app in H1 as [H1 H2].
+  - apply Forall_app in H1 as [H1 H2].
     inversion H2;subst.
-    congruence. *)
-Qed.
+    congruence.
+Qed. *)
 
 (*
 lemma is_val -> normalized
@@ -1000,4 +1154,42 @@ Hint Resolve
   : core.
 
 
+ *)
 
+
+ Lemma contextual_step_lambda x T f U e1 e2:
+  contextual_step e1 e2 →
+  contextual_step (Lam x T f U e1) (Lam x T f U e2).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (LamCtx x T f U HoleCtx)).
+Qed.
+
+Lemma contextual_step_app_l e1 e1' e2:
+  contextual_step e1 e1' →
+  contextual_step (App e1 e2) (App e1' e2).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (AppLCtx HoleCtx e2)).
+Qed.
+
+Lemma contextual_step_app_r e1 e2 e2':
+  (* is_val e1 → *)
+  contextual_step e2 e2' →
+  contextual_step (App e1 e2) (App e1 e2').
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (AppRCtx e1 HoleCtx)).
+Qed.
+
+#[export]
+Hint Resolve contextual_step_lambda contextual_step_app_l contextual_step_app_r : core.
+
+
+
+Lemma norm_inversion_Bot e:
+  normalize_step Bot e → e = Bot.
+Proof.
+  intros Hnorm.
+  inversion Hnorm;subst;auto.
+Qed.
