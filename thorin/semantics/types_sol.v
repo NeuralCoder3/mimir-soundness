@@ -1508,6 +1508,136 @@ Proof.
 Admitted.
 
 
+(*
+if e:A
+and e -> e'
+then
+normal e' : A'
+s.t. A ->* A'
+*)
+Lemma typed_preservation_mut:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+  forall (HTy: TY Γ ⊢ e : A), (* duplication for preservation through induction *)
+    Γ = ∅ →
+    forall e' e'',
+    contextual_step e e' →
+    normal_eval e' e'' →
+    exists A', (* A'',  *)
+    TY ∅ ⊢ e'' : A' ∧
+    rtc (contextual_step) A A'
+    (* normal_eval A' A'' ∧ *)
+  ) /\
+  (forall Γ A e (H:type_assignable Γ A e),
+    forall (HTy: type_assignable Γ A e), 
+    Γ = ∅ →
+    forall e' e'',
+    contextual_step e e' →
+    normal_eval e' e'' →
+    exists A', 
+    type_assignable ∅ A' e'' ∧
+    rtc (contextual_step) A A'
+  ).
+Proof.
+  eapply typed_ind.
+  all: intros.
+  (* rename assumption with 
+  - normal_eval to Hnorm 
+  - contextual_step to Hstep
+
+  separate matches as the function is idempotent
+  *)
+  all: match goal with
+  | H: normal_eval ?e' ?e'' |- _ => rename H into Hnorm
+  end.
+  all: match goal with
+  | H: contextual_step ?e ?e' |- _ => rename H into Hstep
+  end.
+  11: {
+    (* assignable case => just use IH *)
+    edestruct H as (?&?&?);eauto.
+    eexists;split;eauto.
+    now constructor.
+  }
+  all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
+  all: destruct K;simpl in *;try congruence.
+  all: subst.
+  all: try now inversion Hstep.
+  all: try inversion He1;subst.
+  - (* step inside lambda body *)
+    admit.
+  - (* step app *)
+    specialize (typed_preservation_base_step (e eT) e2 U' e'') as Hbase.
+    specialize (Hbase HTy Hstep Hnorm).
+    eexists. split;eauto.
+    constructor.
+  - (* step app left *)
+
+    (* assert(
+
+    ). *)
+
+    assert(exists Ke2', 
+      normal_eval (fill K e2) Ke2'
+    ) as [Ke2' HKe2'] by admit.
+    edestruct H as [Pi' [HtyPi' HstepPi']].
+    1-2: eauto.
+    1: {
+      eexists.
+      all: eauto.
+    }
+    1: eassumption.
+    admit.
+
+    (*
+    TODO: is the result still an App?
+    or can a step left do something such that normalization would evaluate it? E.g. transform left into a receiving lambda
+    *)
+  - (* step app right *)
+    (*
+      we know 
+      e0 (fill K e1) ->b e0 (fill K e2)   (step in e1)
+      ->n e'' 
+    
+      under assumption that original expression is normalized,
+      we have normal_eval (e0 (fill K e1)) (e0 (fill K e1))
+      => normal_eval e0 e0
+      TODO: add the assumption
+    *)
+
+    (* normal_eval (e0 (fill K e2)) (e0 Ke2') <- this is e'' *)
+    assert(exists Ke2',
+      e'' = App e0 Ke2' /\
+      normal_eval (fill K e2) Ke2'
+    ) as (Ke2'&->&HKe2') by admit.
+    
+    edestruct H0 as [T'' [HtyT'' HstepT'']].
+    1-2: eauto.
+    1: {
+      eexists.
+      all: eauto.
+    }
+    1: eassumption.
+
+    (* assert(
+      subst' x (fill K e2) U = U''
+    ) *)
+
+    eexists;split.
+    + econstructor.
+      2: eassumption.
+
+
+      * eassumption.
+      * admit. (* type step *)
+      * admit.
+    + 
+
+    admit.
+Admitted.
+
+
+
+
 
 Lemma typed_preservation e e' A
   e'':
