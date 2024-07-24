@@ -1617,22 +1617,26 @@ Proof.
       all: eauto.
     }
     1: eassumption.
+    replace T'' with T in * by admit. (* full eval on type level *)
 
-    (* assert(
-      subst' x (fill K e2) U = U''
-    ) *)
+    assert(exists U'',
+      normal_eval (subst' x Ke2' U) U''
+    ) as (U''&HU'') by admit.
 
     eexists;split.
     + econstructor.
       2: eassumption.
-
-
       * eassumption.
-      * admit. (* type step *)
-      * admit.
-    + 
-
-    admit.
+      * apply HU''. (* subst eval normal *)
+      (*
+        U[(fill K e1)/x] ->n U'
+        e1 ->b e2
+        fill K e2 ->n Ke2'
+        then 
+        U[Ke2'/x] ->n U''
+      *)
+    + admit. (* TODO: here should be an additional normalization step *)
+      (* U' ->b* U'' *)
 Admitted.
 
 
