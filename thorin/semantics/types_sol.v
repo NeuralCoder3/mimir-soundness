@@ -1515,6 +1515,47 @@ then
 normal e' : A'
 s.t. A ->* A'
 *)
+
+
+Lemma typed_preservation_mut:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+  forall (HTy: TY Γ ⊢ e : A), (* duplication for preservation through induction *)
+    Γ = ∅ →
+    forall e' e'',
+    contextual_step e e' →
+    exists e'' e''' A' A'',
+    TY ∅ ⊢ e''' : A'' ∧
+    rtc (contextual_step) e' e'' ∧
+    normal_eval e'' e''' ∧
+    rtc (contextual_step) A A' ∧
+    normal_eval A' A''
+  ).
+Proof.
+  intros ? ? ? H.
+  induction H.
+  all: intros HTy -> e' e'' Hstep.
+
+  all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
+  all: destruct K;simpl in *;try congruence.
+  all: subst.
+  all: try now inversion Hstep.
+  all: try inversion He1;subst.
+  - 
+    (* apply typed_preservation_base_step;eauto. *)
+
+
+
+
+
+
+
+(*
+if e:A
+and e -> e'
+then
+normal e' : A'
+s.t. A ->* A'
+*)
 Lemma typed_preservation_mut:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), (* duplication for preservation through induction *)
