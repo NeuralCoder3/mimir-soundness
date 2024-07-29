@@ -1517,7 +1517,7 @@ s.t. A ->* A'
 *)
 
 
-Lemma typed_preservation_mut:
+Lemma typed_preservation_mut_eventually:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), (* duplication for preservation through induction *)
     Γ = ∅ →
