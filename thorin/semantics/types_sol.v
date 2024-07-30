@@ -145,7 +145,7 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ U : sU →
       (* kind_dominance [sT; sU] s → *)
       TY Γ ⊢ (Pi BAnon T U) : (max sT sU) *)
-    | typed_lam Γ x T ef U e s:
+    | typed_lam Γ x T ef U e sT sU:
       (* TODO: typing of T and U (not in paper) (star as well as box allowed) 
 
       (well we might want to allow app, ... => any valid type
@@ -162,7 +162,13 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       *)
       (* TY Γ ⊢ T : sT →
       TY (insert_name x T Γ) ⊢ U : sU → *)
-      TY Γ ⊢ (Pi x T U) : s →
+      (* TY Γ ⊢ (Pi x T U) : s → *)
+      (*
+      unfolding to make induction structurally
+      *)
+      TY Γ ⊢ T : Sort sT →
+      TY (insert_name x T Γ) ⊢ U : Sort sU →
+
       TY (insert_name x T Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
       (* type_assignable (insert_name x T Γ) U e → *)
@@ -1596,6 +1602,41 @@ Proof.
   econstructor;eauto.
 Qed.
 
+
+(*
+If type steps, its expression steps to a typed expression again
+*)
+Lemma typed_preservation_eventually_invers:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+  forall (HTy: TY Γ ⊢ e : A), 
+    Γ = ∅ →
+    forall A', A →ᵦ A' →
+
+    (* we need the same eventual-stepping as types can be as weird as expressions *)
+    exists e' e'' A'' A''',
+    TY ∅ ⊢ e'' : A''' ∧
+    (e →ᵦ* e' ∧ e' →ₙ e'') ∧
+    (A' →ᵦ* A'' ∧ A'' →ₙ A''')
+  ).
+Proof.
+(* maybe we need induction over K? *)
+  (* intros ? ? ? H.
+  induction H.
+  all: intros HTy -> A' Hstep.
+  all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
+  all: destruct K;simpl in *;try congruence.
+  all: subst.
+  all: try now inversion Hstep.
+  all: try inversion He1;subst.
+  - admit.
+  - admit.
+  - admit.
+  - admit. *)
+Admitted.
+
+(*
+If expression steps, it is eventually typed again
+*)
 Lemma typed_preservation_eventually:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), 
@@ -1630,9 +1671,129 @@ Proof.
     if step in context => still typed => see paper again (page 58)
     *)
     specialize (IHsyn_typed1 H eq_refl (fill K e2)).
-    edestruct IHsyn_typed1 as (Ke2'&Ke2''&T'&T''&HTyKe2''&HBKe2&HNKe2&HBT'&HN'T).
+    edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: now apply fill_step.
-    assert (TY (insert_name x0 T'' ∅) ⊢ U0 : Sort sU) by admit.
+    assert (TY (insert_name x0 Ke2'' ∅) ⊢ U0 : Sort sU) by admit.
+    assert (exists Pi'', 
+      normal_eval (Pi x0 Ke2' U0) Pi'') as [Pi'' HPi''] by admit.
+    exists (Pi x0 Ke2' U0).
+    exists Pi''.
+    (* TODO: U0 already normalized *)
+    assert (Pi'' = Pi x0 Ke2'' U0) as -> by admit.
+    do 2 eexists.
+    split;[|split;split].
+    assert (A'' = Sort sT) as -> by admit.
+    2-3: admit. (* easy *)
+    1: constructor;eassumption.
+    1-2: admit. (* easy *)
+
+  - (* Pi codomain *)
+    (* specialize (IHsyn_typed2 H0 eq_refl (fill K e2)). *)
+    edestruct IHsyn_typed2 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
+    1: assumption.
+    1: admit. (* TODO: non empty context *)
+    1: eapply fill_step;eassumption.
+    exists (Pi x0 T0 Ke2').
+    exists (Pi x0 T0 Ke2''). (* T0 already normalized *)
+    do 2 exists (LitNat (sT `max` sU)).
+    split;[|split;split].
+    4-5: admit. (* easy *)
+    2-3: admit. (* easy *)
+    constructor.
+    1: eassumption.
+    assert(A'' = Sort sU) as -> by admit.
+    admit. (* TODO: non empty context *)
+
+  - (* domain Type of lambda *)
+  (*
+    same as above:
+    we follow the beta,
+    everything else is normalized and no top-level normalization
+    => just follow subexpression
+  *)
+  (*
+    special as our type recursion is on Pi not T and U
+    still possible (just do 2 beta step chains) but probably individually easier
+  *)
+    specialize (IHsyn_typed1 H eq_refl (fill K e2)).
+    edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
+    1: now apply fill_step.
+    assert (A'' = Sort sT) as -> by admit.
+    exists (Lam x0 Ke2' f U0 e0).
+    exists (Lam x0 Ke2'' f U0 e0).
+    exists (Pi x0 Ke2' U0).
+    exists (Pi x0 Ke2'' U0).
+    split;[|split;split].
+    1: {
+      eapply typed_lam.
+      1: eassumption.
+      all: admit. (* TODO: step in assumption *)
+    }
+    1-2: admit. (* easy *)
+    1-2: admit. (* easy *)
+
+  - (* codomain of Lambda *)
+
+    (*
+      The codomain changes 
+      => body needs to step the change 
+
+      currently, we have preservation as:
+      if expression steps, there is a stepped type
+
+      here, we need
+      if type steps, expression can step too
+
+
+      confluence/church rosser alone would not be enough
+      The statement would be:
+        e moves not has a type resulting from the old one
+        both meet => 
+          we get a new type of body expression (by IH as body steps)
+          by confluence this stepped from the original codomain
+        (we need that it steps at least one time but we can do this by value distinction and contradiction)
+      however, for this we need that the body steps which we do not have
+    *)
+
+
+    (* edestruct IHsyn_typed2 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
+    1: eassumption.
+    1: admit. (* extended context *)
+    1: eapply fill_step;eassumption.
+    assert (A'' = Sort sU) as -> by admit. *)
+
+    specialize (typed_preservation_eventually_invers 
+      (insert_name x0 T0 ∅)
+      e0 
+      (fill K e1)
+      H2 H2 
+    ) as InvPreserve.
+
+    exists (Lam x0 T0 f Ke2' e0).
+    exists (Lam x0 T0 f Ke2'' e0).
+    exists (Pi x0 T0 Ke2').
+    exists (Pi x0 T0 Ke2'').
+    split;[|split;split].
+    1: {
+      eapply typed_lam.
+      1: eassumption.
+      all: try eassumption.
+      (* TODO: Ke2'' only under env *)
+      1: admit.
+      (* TODO: body changes type => we need to step body too *)
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
