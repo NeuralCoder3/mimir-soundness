@@ -473,14 +473,16 @@ Inductive is_val : expr → Prop :=
   | LitNatV n : is_val (LitNat n)
   | LitIdxV n i : is_val (LitIdx n i)
   | PiV x T U : 
-    (* is_val T → *)
+    is_val T →
+    is_val U →
     is_val (Pi x T U)
   | LamV x T f U e : 
     (* TODO: should this be value or normalized?
     => we step not in the type
     => normalization already sufficient for value
      *)
-    (* is_val T → *)
+    is_val T →
+    is_val U →
     (* normalized T → *)
     (* U might depend on x:T *)
     is_val e ->
@@ -709,9 +711,13 @@ Inductive ectx :=
   (* the filter depends on the argument *)
   (* | LamCtx (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr) *)
   (* do not go in (named) depency types *)
+  | LamCtxT (x:binder) (K: ectx) (f:expr) (U:expr) (e:expr)
+  | LamCtxU (x:binder) (T: expr) (f:expr) (K:ectx) (e:expr)
   | LamCtx (x:binder) (T: expr) (f:expr) (U:expr) (K: ectx)
   | AppLCtx (K: ectx) (v2 : expr)
   | AppRCtx (e1 : expr) (K: ectx) 
+  | PiCtxT (x:binder) (K: ectx) (U:expr)
+  | PiCtxU (x:binder) (T:expr) (K: ectx)
   (* (H: is_val e1) *)
   (* only first argument in sigma *)
   (* | SigmaCtx (x:binder) (K: ectx) (args: list (binder * expr)) *)
@@ -749,7 +755,11 @@ Inductive ectx :=
 Fixpoint fill (K : ectx) (e : expr) : expr :=
   match K with
   | HoleCtx => e
+  | LamCtxT x K f U eb => Lam x (fill K e) f U eb
+  | LamCtxU x T f K eb => Lam x T f (fill K e) eb
   | LamCtx x T f U K => Lam x T f U (fill K e)
+  | PiCtxT x K U => Pi x (fill K e) U
+  | PiCtxU x T K => Pi x T (fill K e)
   | AppLCtx K v2 => App (fill K e) v2
   (* | AppRCtx e1 K H => App e1 (fill K e) *)
   | AppRCtx e1 K => App e1 (fill K e)
@@ -778,7 +788,11 @@ Fixpoint fill (K : ectx) (e : expr) : expr :=
 Fixpoint comp_ectx (K1: ectx) (K2 : ectx) : ectx :=
   match K1 with
   | HoleCtx => K2
+  | LamCtxT x K f U eb => LamCtxT x (comp_ectx K K2) f U eb
+  | LamCtxU x T f K eb => LamCtxU x T f (comp_ectx K K2) eb
   | LamCtx x T f U K => LamCtx x T f U (comp_ectx K K2)
+  | PiCtxT x K U => PiCtxT x (comp_ectx K K2) U
+  | PiCtxU x T K => PiCtxU x T (comp_ectx K K2)
   | AppLCtx K v2 => AppLCtx (comp_ectx K K2) v2
   (* | AppRCtx e1 K H => AppRCtx e1 (comp_ectx K K2) H *)
   | AppRCtx e1 K => AppRCtx e1 (comp_ectx K K2)
@@ -854,12 +868,21 @@ Proof.
   induction e;try now econstructor.
   (* - admit. (* var -- ruled out by typed *) *)
   - econstructor.
-    apply IHe4.
-    contradict H.
-    destruct H as [ebody' H].
-    destruct H as [K e1' e2' -> -> Hred].
-    eexists. 
-    eapply Ectx_step with (K:=LamCtx x e1 e2 e3 K);eauto.
+    1: apply IHe1.
+    2: apply IHe2.
+    all: contradict H;destruct H as [e' [K e1' e2' -> -> Hred]].
+    all: eexists;eapply Ectx_step;eauto.
+    + now instantiate (1:=PiCtxT x K e2).
+    + now instantiate (1:=PiCtxU x e1 K).
+  - econstructor.
+    1: apply IHe1.
+    2: apply IHe3.
+    3: apply IHe4.
+    all: contradict H;destruct H as [e' [K e1' e2' -> -> Hred]].
+    all: eexists;eapply Ectx_step;eauto.
+    + now instantiate (1:=LamCtxT x K e2 e3 e4).
+    + now instantiate (1:=LamCtxU x e1 e2 K e4).
+    + now instantiate (1:=LamCtx  x e1 e2 e3 K).
   - contradict H.
     (* app *)
     (* if typed and normalized => lambda => makes an app step *)
@@ -1156,6 +1179,38 @@ Proof.
   by apply (fill_contextual_step (LamCtx x T f U HoleCtx)).
 Qed.
 
+Lemma contextual_step_lambda_domain x T1 T2 f U e:
+  contextual_step T1 T2 →
+  contextual_step (Lam x T1 f U e) (Lam x T2 f U e).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (LamCtxT x HoleCtx f U e)).
+Qed.
+
+Lemma contextual_step_lambda_codomain x T f U1 U2 e:
+  contextual_step U1 U2 →
+  contextual_step (Lam x T f U1 e) (Lam x T f U2 e).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (LamCtxU x T f HoleCtx e)).
+Qed.
+
+Lemma contextual_step_pi_domain x T U T':
+  contextual_step T T' →
+  contextual_step (Pi x T U) (Pi x T' U).
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (PiCtxT x HoleCtx U)).
+Qed.
+
+Lemma contextual_step_pi_codomain x T U U':
+  contextual_step U U' →
+  contextual_step (Pi x T U) (Pi x T U').
+Proof.
+  intros Hcontextual.
+  by apply (fill_contextual_step (PiCtxU x T HoleCtx)).
+Qed.
+
 Lemma contextual_step_app_l e1 e1' e2:
   contextual_step e1 e1' →
   contextual_step (App e1 e2) (App e1' e2).
@@ -1174,7 +1229,13 @@ Proof.
 Qed.
 
 #[export]
-Hint Resolve contextual_step_lambda contextual_step_app_l contextual_step_app_r : core.
+Hint Resolve 
+  contextual_step_lambda 
+  contextual_step_lambda_domain
+  contextual_step_lambda_codomain
+  contextual_step_pi_domain
+  contextual_step_pi_codomain
+  contextual_step_app_l contextual_step_app_r : core.
 
 
 

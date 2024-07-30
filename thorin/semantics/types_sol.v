@@ -165,7 +165,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       TY Γ ⊢ (Pi x T U) : s →
       TY (insert_name x T Γ) ⊢ ef : Bool →
       (* TY (<[x := T]> Γ) ⊢ U ← e → *)
-      type_assignable (insert_name x T Γ) U e →
+      (* type_assignable (insert_name x T Γ) U e → *)
+      TY (insert_name x T Γ) ⊢ e : U →
       (* without tuples, assignable becomes typed *)
       (* TY (insert_name x T Γ) ⊢ e : U → *)
       TY Γ ⊢ (Lam x T ef U e) : (Pi x T U)
@@ -179,7 +180,8 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
     | typed_app Γ e eT x T U U':
       (* handles both named and unnamed *)
       TY Γ ⊢ e : (Pi x T U) →
-      type_assignable Γ T eT →
+      (* type_assignable Γ T eT → *)
+      TY Γ ⊢ eT : T →
       (* without tuples, assignable becomes typed *)
       (* TY Γ ⊢ eT : T → *)
       normal_eval (subst' x eT U) U' →
@@ -255,11 +257,12 @@ Inductive syn_typed : typing_context → expr → expr → Prop :=
       normal_eval (Extract T ei) U ->
       TY Γ ⊢ (Extract e ei) : U *)
 
-with type_assignable : typing_context -> expr -> expr -> Prop :=
+(* with type_assignable : typing_context -> expr -> expr -> Prop :=
   | assignable_typed Γ e T:
       TY Γ ⊢ e : T ->
       (* TY Γ ⊢ T ← e  *)
-      type_assignable Γ T e
+      type_assignable Γ T e *)
+
   (* | assignable_sigma Γ n Ts Ts'' e:
       (* 
         TODO:
@@ -395,12 +398,12 @@ Admitted. *)
 (*
 Derive the mutual induction principles for syn_typed and type_assignable
 *)
-Scheme syn_typed_mut := Induction for syn_typed Sort Prop
+(* Scheme syn_typed_mut := Induction for syn_typed Sort Prop
 with type_assignable_mut := Induction for type_assignable Sort Prop.
 
-Combined Scheme typed_ind from syn_typed_mut, type_assignable_mut.
+Combined Scheme typed_ind from syn_typed_mut, type_assignable_mut. *)
 
-Lemma typed_weakening_mut:
+(* Lemma typed_weakening_mut:
   (forall Γ e A (H:TY Γ ⊢ e : A),
     forall Δ,
     Γ ⊆ Δ →
@@ -458,9 +461,9 @@ Proof.
     + admit. (* needs nested induction *)
   *)
 (* Admitted. *)
-Qed.
+Qed. *)
 
-Corollary typed_weakening Γ Δ e A:
+(* Corollary typed_weakening Γ Δ e A:
   TY Γ ⊢ e : A →
   Γ ⊆ Δ →
   TY Δ ⊢ e : A.
@@ -468,7 +471,17 @@ Proof.
   destruct typed_weakening_mut.
   intros.
   eapply H;eauto.
-Qed.
+Qed. *)
+
+Lemma typed_weakening Γ Δ e A:
+  TY Γ ⊢ e : A →
+  Γ ⊆ Δ →
+  TY Δ ⊢ e : A.
+Proof.
+  intros HTy Hsub.
+  induction HTy;eauto.
+Admitted.
+
 
 
 (* Lemma typed_weakening Γ Δ e A:
@@ -1265,7 +1278,47 @@ exists e' s.t. e -> e'
   we now go under binder => need Γ
 *)
 
-Lemma typed_progress_mut:
+
+Corollary typed_progress Γ e A:
+  TY Γ ⊢ e : A →
+  is_val e ∨ reducible e.
+Proof.
+  intros HTy.
+  induction HTy.
+  all: subst;eauto 10 using is_val.
+  - (* Pi *)
+    destruct IHHTy1 as [HvalT|[? ?]].
+    + destruct IHHTy2 as [HvalU|[? ?]].
+      * left. now constructor.
+      * right. eexists. eauto.
+    + right. eexists. eauto.
+  - (* Lambda *)
+    destruct IHHTy3 as [Hvale|[? ?]];[|right;eexists;eauto].
+    destruct IHHTy1 as [HvalPi|[? ?]].
+    + left. inversion HvalPi;subst.
+      now constructor.
+    + admit. (* if Pi steps, either T or U steps *)
+  - (* App *)
+    (* only value for Idx n *)
+    destruct IHHTy1 as [Hvale|[? ?]];[|right;eexists;eauto].
+    destruct IHHTy2 as [Hvale2|[? ?]];[|right;eexists;eauto].
+    specialize (canonical_value_pi _ _ _ _ _ HTy1 Hvale) as [(->&->&->&->)|(f&ef&->)].
+    + (* Idx *)
+      specialize (canonical_value_nat _ _ HTy2 Hvale2) as [m ->].
+      left. constructor.
+    + right. eexists. eapply base_contextual_step.
+      eapply BetaS. reflexivity.
+Admitted.
+
+
+
+
+
+
+
+
+
+(* Lemma typed_progress_mut:
   (* everything except var works out with Γ instead of ∅ *)
   (forall Γ e A (H:TY Γ ⊢ e : A),
     (* Γ = ∅ -> *)
@@ -1304,7 +1357,7 @@ Proof.
         eexists. eauto.
     + right. destruct H.
       eexists. eauto.
-Qed.
+Qed. *)
 (*
   - (* pi *)
     destruct H;eauto.
@@ -1449,13 +1502,13 @@ Qed.
 Admitted.
 *)
 
-Corollary typed_progress e A:
+(* Corollary typed_progress e A:
   (* everything except var works out with Γ instead of ∅ *)
   TY ∅ ⊢ e : A →
   is_val e ∨ reducible e.
 Proof.
   edestruct typed_progress_mut as [H _];eauto.
-Qed.
+Qed. *)
 
 
 
@@ -1517,31 +1570,93 @@ s.t. A ->* A'
 *)
 
 
-Lemma typed_preservation_mut_eventually:
+
+(*
+
+Γ ⊢ e : A
+e →β e'
+=================
+∃ e'' e''' A' A''
+e' →*β e'' →n e'''
+A  →*β A'  →n A''
+Γ ⊢ e''' : A''
+
+*)
+
+
+
+Notation "e →ᵦ* e'" := (rtc (contextual_step) e e') (at level 50).
+Notation "e →ᵦ e'" := (contextual_step e e') (at level 50).
+Notation "e →ₙ e'" := (normal_eval e e') (at level 50).
+
+Lemma fill_step K e1 e2:
+  base_step e1 e2 ->
+  fill K e1 →ᵦ fill K e2.
+Proof.
+  econstructor;eauto.
+Qed.
+
+Lemma typed_preservation_eventually:
   (forall Γ e A (H:TY Γ ⊢ e : A),
-  forall (HTy: TY Γ ⊢ e : A), (* duplication for preservation through induction *)
+  forall (HTy: TY Γ ⊢ e : A), 
     Γ = ∅ →
-    forall e' e'',
-    contextual_step e e' →
+    forall e', e →ᵦ e' →
     exists e'' e''' A' A'',
     TY ∅ ⊢ e''' : A'' ∧
-    rtc (contextual_step) e' e'' ∧
-    normal_eval e'' e''' ∧
-    rtc (contextual_step) A A' ∧
-    normal_eval A' A''
+    (e' →ᵦ* e'' ∧ e'' →ₙ e''') ∧
+    (A →ᵦ* A' ∧ A' →ₙ A'')
   ).
 Proof.
   intros ? ? ? H.
   induction H.
-  all: intros HTy -> e' e'' Hstep.
+  all: intros HTy -> e' Hstep.
 
   all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
   all: destruct K;simpl in *;try congruence.
   all: subst.
   all: try now inversion Hstep.
   all: try inversion He1;subst.
-  - 
-    (* apply typed_preservation_base_step;eauto. *)
+  (* the type of a lam will also come up *)
+  (* also return type => if we have e_{2+2} in the body, the return type changes from Idx (2+2) to Idx(4) *)
+  - (* Pi domain *)
+
+    (* e1 takes one step to e2
+    by IH 
+    fill K e1 takes a few steps until typed again
+
+    extend those steps to Pi 
+    and but is U still typed under this? (in env x:T)
+
+    if step in context => still typed => see paper again (page 58)
+    *)
+    specialize (IHsyn_typed1 H eq_refl (fill K e2)).
+    edestruct IHsyn_typed1 as (Ke2'&Ke2''&T'&T''&HTyKe2''&HBKe2&HNKe2&HBT'&HN'T).
+    1: now apply fill_step.
+    assert (TY (insert_name x0 T'' ∅) ⊢ U0 : Sort sU) by admit.
+
+
+
+  - (* in the body of a lambda *)
+    (* the body type might have changed => change U0 to type of fill K e2 (or its result via IH chaining) *)
+    (* TODO: IH under assingability *)
+
+    do 4 eexists.
+    split;[|split;split].
+    admit.
+  - (* beta app *)
+    assert(exists e2', e2 →ₙ e2') as [e2' He2'] by admit.
+    specialize (typed_preservation_base_step _ _ _ _ HTy Hstep He2') as HTye2'.
+    do 4 eexists.
+    split. 2: split;split.
+    1: eassumption.
+    2: eassumption.
+    1: constructor.
+    1: constructor.
+    admit.
+  - (* left of app *)
+    admit.
+  - (* right of app *)
+    admit.
 
 
 

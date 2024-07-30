@@ -17,8 +17,10 @@ lib/facts.v
 # System F
 semantics/lang.v
 semantics/notation.v
+# semantics/types_sol.v
+
+
 # semantics/types.v
-semantics/types_sol.v
 # semantics/tactics.v
 # semantics/bigstep.v
 # semantics/church_encodings.v
