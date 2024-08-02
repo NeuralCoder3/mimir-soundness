@@ -1299,11 +1299,11 @@ Proof.
       * right. eexists. eauto.
     + right. eexists. eauto.
   - (* Lambda *)
-    destruct IHHTy3 as [Hvale|[? ?]];[|right;eexists;eauto].
-    destruct IHHTy1 as [HvalPi|[? ?]].
-    + left. inversion HvalPi;subst.
-      now constructor.
-    + admit. (* if Pi steps, either T or U steps *)
+    destruct IHHTy4 as [Hvale|[? ?]];[|right;eexists;eauto].
+    destruct IHHTy2 as [HvalU|[? ?]];[|right;eexists;eauto].
+    destruct IHHTy1 as [HvalT|[? ?]];[|right;eexists;eauto].
+    left. 
+    now constructor.
   - (* App *)
     (* only value for Idx n *)
     destruct IHHTy1 as [Hvale|[? ?]];[|right;eexists;eauto].
@@ -1314,7 +1314,7 @@ Proof.
       left. constructor.
     + right. eexists. eapply base_contextual_step.
       eapply BetaS. reflexivity.
-Admitted.
+Qed.
 
 
 
@@ -1606,7 +1606,7 @@ Qed.
 (*
 If type steps, its expression steps to a typed expression again
 *)
-Lemma typed_preservation_eventually_invers:
+(* Lemma typed_preservation_eventually_invers:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), 
     Γ = ∅ →
@@ -1632,7 +1632,54 @@ Proof.
   - admit.
   - admit.
   - admit. *)
+Admitted. *)
+
+(* Difference to above: we have →ᵦ* instead of just one step *)
+Lemma typed_preservation_eventually_invers:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+  forall (HTy: TY Γ ⊢ e : A), 
+    Γ = ∅ →
+    forall A', A →ᵦ* A' →
+
+    (* we need the same eventual-stepping as types can be as weird as expressions *)
+    exists e' e'' A'' A''',
+    TY ∅ ⊢ e'' : A''' ∧
+    (e →ᵦ* e' ∧ e' →ₙ e'') ∧
+    (A' →ᵦ* A'' ∧ A'' →ₙ A''')
+  ).
+Proof.
+(* maybe we need induction over K? *)
+  (* intros ? ? ? H.
+  induction H.
+  all: intros HTy -> A' Hstep.
+  all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
+  all: destruct K;simpl in *;try congruence.
+  all: subst.
+  all: try now inversion Hstep.
+  all: try inversion He1;subst.
+  - admit.
+  - admit.
+  - admit.
+  - admit. *)
 Admitted.
+
+
+ Corollary typed_preservation_eventually_invers_onestep:
+  (forall Γ e A (H:TY Γ ⊢ e : A),
+  forall (HTy: TY Γ ⊢ e : A), 
+    Γ = ∅ →
+    forall A', A →ᵦ A' →
+
+    (* we need the same eventual-stepping as types can be as weird as expressions *)
+    exists e' e'' A'' A''',
+    TY ∅ ⊢ e'' : A''' ∧
+    (e →ᵦ* e' ∧ e' →ₙ e'') ∧
+    (A' →ᵦ* A'' ∧ A'' →ₙ A''')
+  ).
+Proof.
+Admitted.
+
+
 
 (*
 If expression steps, it is eventually typed again
@@ -1673,19 +1720,22 @@ Proof.
     specialize (IHsyn_typed1 H eq_refl (fill K e2)).
     edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: now apply fill_step.
-    assert (TY (insert_name x0 Ke2'' ∅) ⊢ U0 : Sort sU) by admit.
-    assert (exists Pi'', 
-      normal_eval (Pi x0 Ke2' U0) Pi'') as [Pi'' HPi''] by admit.
-    exists (Pi x0 Ke2' U0).
-    exists Pi''.
+    assert (TY (insert_name x0 Ke2'' ∅) ⊢ U0 : Sort sU) by admit. (* admit *)
     (* TODO: U0 already normalized *)
-    assert (Pi'' = Pi x0 Ke2'' U0) as -> by admit.
+    (* assert (Pi'' = Pi x0 Ke2'' U0) as -> by admit.
+    assert (exists Pi'', 
+      normal_eval (Pi x0 Ke2' U0) Pi'') as [Pi'' HPi''] by admit. *)
+    assert (
+      normal_eval (Pi x0 Ke2' U0) (Pi x0 Ke2'' U0)
+    ) by admit.
+    exists (Pi x0 Ke2' U0).
+    exists (Pi x0 Ke2'' U0).
     do 2 eexists.
     split;[|split;split].
-    assert (A'' = Sort sT) as -> by admit.
-    2-3: admit. (* easy *)
+    assert (A'' = Sort sT) as -> by admit. (* inversion Sort beta, norm *)
+    2-3: admit. (* easy, Pi congruence beta norm *)
     1: constructor;eassumption.
-    1-2: admit. (* easy *)
+    1-2: admit. (* easy, LitNat beta norm *)
 
   - (* Pi codomain *)
     (* specialize (IHsyn_typed2 H0 eq_refl (fill K e2)). *)
@@ -1697,11 +1747,11 @@ Proof.
     exists (Pi x0 T0 Ke2''). (* T0 already normalized *)
     do 2 exists (LitNat (sT `max` sU)).
     split;[|split;split].
-    4-5: admit. (* easy *)
-    2-3: admit. (* easy *)
+    4-5: admit. (* easy LitNat beta norm *)
+    2-3: admit. (* easy Pi beta norm congruence *)
     constructor.
     1: eassumption.
-    assert(A'' = Sort sU) as -> by admit.
+    assert(A'' = Sort sU) as -> by admit. (* Sort inversion beta norm *)
     admit. (* TODO: non empty context *)
 
   - (* domain Type of lambda *)
@@ -1718,7 +1768,7 @@ Proof.
     specialize (IHsyn_typed1 H eq_refl (fill K e2)).
     edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: now apply fill_step.
-    assert (A'' = Sort sT) as -> by admit.
+    assert (A'' = Sort sT) as -> by admit. (* Sort inversion beta norm *)
     exists (Lam x0 Ke2' f U0 e0).
     exists (Lam x0 Ke2'' f U0 e0).
     exists (Pi x0 Ke2' U0).
@@ -1762,49 +1812,54 @@ Proof.
     1: eapply fill_step;eassumption.
     assert (A'' = Sort sU) as -> by admit. *)
 
-    specialize (typed_preservation_eventually_invers 
+    specialize (typed_preservation_eventually_invers_onestep 
       (insert_name x0 T0 ∅)
       e0 
       (fill K e1)
       H2 H2 
     ) as InvPreserve.
+    edestruct InvPreserve as (e0'&e0''&A'&A''&HTye0''&(Hstepe0&Hnorme0)&(HstepA'&HnormA')).
+    1: admit. (* extend env *)
+    1: eapply fill_step;eassumption.
 
-    exists (Lam x0 T0 f Ke2' e0).
-    exists (Lam x0 T0 f Ke2'' e0).
-    exists (Pi x0 T0 Ke2').
-    exists (Pi x0 T0 Ke2'').
+
+    exists (Lam x0 T0 f A'  e0').
+    exists (Lam x0 T0 f A'' e0'').
+    exists (Pi x0 T0 A').
+    exists (Pi x0 T0 A'').
     split;[|split;split].
     1: {
       eapply typed_lam.
-      1: eassumption.
-      all: try eassumption.
-      (* TODO: Ke2'' only under env *)
+      1: eassumption. (* T did not change *)
+      all: try eassumption. (* f did not change *)
+      (* TODO: A'' is still typed with sort *)
       1: admit.
-      (* TODO: body changes type => we need to step body too *)
+      admit. (* extended env *)
     }
 
+    all: admit. (* easy *)
 
+  - (* body of lambda *)
 
+    edestruct (IHsyn_typed4) as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)).
+    2: admit. (* extended env *)
+    2: eapply fill_step;eassumption.
+    1: eassumption.
 
-
-
-
-
-
-
-
-
-
-
-
-  - (* in the body of a lambda *)
-    (* the body type might have changed => change U0 to type of fill K e2 (or its result via IH chaining) *)
-    (* TODO: IH under assingability *)
-
-    do 4 eexists.
+    exists (Lam x0 T0 f A'  Ke2').
+    exists (Lam x0 T0 f A'' Ke2'').
+    exists (Pi x0 T0 A').
+    exists (Pi x0 T0 A'').
     split;[|split;split].
-    admit.
-  - (* beta app *)
+    2-5: admit. (* easy *)
+    econstructor.
+    all: try eassumption.
+    admit. (* TODO: A'' still Sort typed *)
+    admit. (* extended env *)
+    
+
+  - (* toplevel app *)
+
     assert(exists e2', e2 →ₙ e2') as [e2' He2'] by admit.
     specialize (typed_preservation_base_step _ _ _ _ HTy Hstep He2') as HTye2'.
     do 4 eexists.
@@ -1813,11 +1868,176 @@ Proof.
     2: eassumption.
     1: constructor.
     1: constructor.
-    admit.
-  - (* left of app *)
-    admit.
-  - (* right of app *)
-    admit.
+    admit. (* type already normalized (it is the result of normal_eval) *)
+
+  - (* step in left app *)
+    edestruct (IHsyn_typed1) as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)). 
+    1: assumption.
+    1: reflexivity.
+    1: eapply fill_step;eassumption.
+    (* 
+    TODO:
+    the lambda domain type might make a step
+    then the argument has to make steps
+
+    or the body (and codomain) changes changing the complete type
+     *)
+     rename U' into substU.
+     (* inversion on beta and normal *)
+     assert(
+      exists T' T'' U' U'',
+      A' = Pi x T' U' /\ 
+      T →ᵦ* T' /\ U →ᵦ* U' /\
+      A'' = Pi x T'' U'' /\ 
+      T' →ₙ T'' /\ U' →ₙ U''
+     ) as  
+     (
+      T'&T''&U'&U''&
+      HA'&
+      HBT&HBU&
+      HA''&
+      HNT&HNU
+     ) by admit.
+     subst.
+     (* the argument steps into an expression 
+     of the correct type
+
+     TODO: we want →ᵦ* and norm of the type not in exists
+      *)
+    assert (
+      exists v2' v2'',
+      TY ∅ ⊢ v2'' : T'' /\
+      v2 →ᵦ* v2' /\ 
+      v2' →ₙ v2''
+    ) as (v2'&v2''&HTyv2&HBv2&HNv2) by admit.
+    assert(
+      exists substU'',
+      subst' x v2'' U'' →ₙ substU''
+    ) as (substU''&HsubstU'') by admit.
+    exists (App Ke2' v2').
+    exists (App Ke2'' v2'').
+    exists (subst' x v2' U'). (* not correct instance *)
+    (* exists (subst' x v2'' U'').  *)
+    exists (substU''). 
+    split;[|split;split].
+    2,3,5: admit. (* easy *)
+    2: admit. (* see comment => we have subst normal and want beta of that *)
+    econstructor.
+    1: eassumption.
+    1: eassumption.
+    1: eassumption.
+
+    (*
+    why does the normalized subst expression steps to something that is normalized into
+    the required type
+    => TODO: do we want to combine beta and normalization
+    *)
+
+    (* specialize (typed_preservation_eventually_invers 
+      ∅
+      v2
+      T
+      H0 H0 
+    ) as InvPreserve.
+    edestruct InvPreserve as (e0'&e0''&A'&A''&HTye0''&(Hstepe0&Hnorme0)&(HstepA'&HnormA')). *)
+
+
+
+  - (* step in right app *)
+
+    (*
+      for e1 being a lambda, it would be easy 
+      but e1 is no value
+      => use if type steps, values steps
+
+      but the type does (possibly) many steps
+
+      ~~Problem: e0 might change its return type
+      now we have the complicated situation with intermediate normalization~~
+
+      e0 does not change its type (as e0 just follows the argument type reduction)
+      The problem is that (see below in UB and UN)
+    *)
+
+
+
+
+    edestruct IHsyn_typed2 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)). 
+    1: assumption.
+    1: reflexivity.
+    1: eapply fill_step;eassumption.
+
+    (* arg steps and lambda must reciprocate steps *)
+    assert(Pi x T U →ᵦ* Pi x A' U) by admit. (* easy *)
+    assert(Pi x A' U →ᵦ* Pi x A'' U) by admit. (* easy *)
+    (* TODO: not exactly the type to expression lemma but instead multiple steps *)
+    assert(
+      exists e0' e0'', 
+      TY ∅ ⊢ e0'' : Pi x A'' U /\
+      e0 →ᵦ* e0' /\ e0' →ₙ e0''
+    ) as (e0'&e0''&HTye0&HBe0&HNe0) by admit.
+
+
+    exists (App e0' Ke2').
+    exists (App e0'' Ke2'').
+    (* exists (subst' x (fill K e1) U). *)
+    (* eexists. *)
+
+    assert (exists UB UN,
+      (* subst' x (fill K e1) U →ᵦ* UB /\ *)
+      True /\
+      UB →ₙ UN /\
+
+      subst' x Ke2'' U →ₙ UN /\
+      U' →ᵦ* UB
+    ) as 
+      (UB&UN&HBUB&HNU&HUN&HBU').
+    {
+      do 2 eexists.
+      split;[|split;[|split]].
+      3: admit. (* defining property of UN *)
+      (* 
+        UB can be subst x Ke2'' U with more or less normalization points
+        e.g. subst x Ke2' U would be more points
+        however, the normalized form (U') of subst x (fill K e1) U has to reduce to UB (3)
+       *)
+      3: admit.
+      all: admit.
+    }
+
+    (* 
+      subst' x (fill K e1) U →ᵦ* UB /\
+      UB →ₙ UN
+
+      subst' x Ke2'' U →ₙ UN
+      (from eval typing)
+      (uniquely determines UN)
+
+      U' →ᵦ* UB
+    *)
+
+    (* assert (exists sUKe2,
+      subst' x (Ke2'') U →ₙ sUKe2) as (sUKe2&HNsUKe2) by admit. *)
+    (*
+      we want just the beta steps in the normalized expression
+      => need confluence?
+    *)
+    (*
+    exists (subst' x (Ke2'') U). (* could be wrong instance *) 
+    exists (sUKe2).
+    *)
+    exists UB.
+    exists UN.
+    split;[|split;split].
+    1: {
+      econstructor.
+      all: try eassumption.
+      (* admit.  *)
+      (* subst already normalized (else normalize) *)
+    }
+    all: try eassumption.
+    all: admit. (* easy *)
+Admitted.
 
 
 
