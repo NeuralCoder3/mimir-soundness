@@ -706,7 +706,8 @@ Proof.
 
 Lemma typed_substitutivity e e' Γ (a: binder) A B 
   Γ' e'_norm B'_norm:
-  TY ∅ ⊢ e' : A →
+  (* TY ∅ ⊢ e' : A → *)
+  TY Γ ⊢ e' : A →
   TY (insert_name a A Γ) ⊢ e : B →
   normal_eval (lang.subst' a e' e) e'_norm →
   normal_eval (lang.subst' a e' B) B'_norm →
@@ -813,11 +814,13 @@ Proof.
     assert (U' = U'') as -> by admit. 
     econstructor.
     + eapply IHsyn_typed1.
-      4: eapply HnormB.
+      2-6: try eassumption.
+      all: admit. (* TODO: *)
+      (* 4: eapply HnormB.
       3: reflexivity.
       1-2: eassumption.
       admit. (* TODO: where does s come from *)
-      eassumption.
+      eassumption. *)
     + eapply IHsyn_typed2.
       4: eassumption.
       1-2: eassumption.
@@ -825,6 +828,7 @@ Proof.
       admit. (* bool norm bool *)
       admit. (* Γ' *)
     + admit. (* TODO: assignability induction *)
+    + admit. (* TODO: *)
   - (* App *)
     admit. (* TODO *)
 Admitted.
@@ -1540,7 +1544,7 @@ Arguments Forall2_nth_error {_ _ _ _ _}.
 
 
 
-Lemma typed_preservation_base_step e e' A
+(* Lemma typed_preservation_base_step e e' A
   e'_norm:
   TY ∅ ⊢ e : A →
   base_step e e' →
@@ -1561,6 +1565,32 @@ Proof.
   1: eassumption.
   inversion H13;subst.
   1: eassumption.
+  admit. (* simple *)
+  (* now rewrite fmap_empty. *)
+(* Qed. *)
+Admitted. *)
+
+
+
+Lemma typed_preservation_base_step e e' Γ A
+  e'_norm:
+  TY Γ ⊢ e : A →
+  base_step e e' →
+  normal_eval e' e'_norm →
+  TY Γ ⊢ e'_norm : A.
+Proof.
+  intros Hty Hstep Hnorm.
+  inversion Hstep;subst.
+  inversion Hty;subst;eauto using is_val.
+  inversion H1;subst.
+
+  eapply typed_substitutivity.
+  3-4: eassumption.
+  2: eassumption.
+  (* substitutivity needs gamma *)
+  1: eassumption.
+  (* inversion H13;subst.
+  1: eassumption. *)
   admit. (* simple *)
   (* now rewrite fmap_empty. *)
 (* Qed. *)
@@ -1638,12 +1668,11 @@ Admitted. *)
 Lemma typed_preservation_eventually_invers:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), 
-    Γ = ∅ →
     forall A', A →ᵦ* A' →
 
     (* we need the same eventual-stepping as types can be as weird as expressions *)
     exists e' e'' A'' A''',
-    TY ∅ ⊢ e'' : A''' ∧
+    TY Γ ⊢ e'' : A''' ∧
     (e →ᵦ* e' ∧ e' →ₙ e'') ∧
     (A' →ᵦ* A'' ∧ A'' →ₙ A''')
   ).
@@ -1667,12 +1696,11 @@ Admitted.
  Corollary typed_preservation_eventually_invers_onestep:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), 
-    Γ = ∅ →
     forall A', A →ᵦ A' →
 
     (* we need the same eventual-stepping as types can be as weird as expressions *)
     exists e' e'' A'' A''',
-    TY ∅ ⊢ e'' : A''' ∧
+    TY Γ ⊢ e'' : A''' ∧
     (e →ᵦ* e' ∧ e' →ₙ e'') ∧
     (A' →ᵦ* A'' ∧ A'' →ₙ A''')
   ).
@@ -1687,17 +1715,17 @@ If expression steps, it is eventually typed again
 Lemma typed_preservation_eventually:
   (forall Γ e A (H:TY Γ ⊢ e : A),
   forall (HTy: TY Γ ⊢ e : A), 
-    Γ = ∅ →
+    (* Γ = ∅ → *)
     forall e', e →ᵦ e' →
     exists e'' e''' A' A'',
-    TY ∅ ⊢ e''' : A'' ∧
+    TY Γ ⊢ e''' : A'' ∧
     (e' →ᵦ* e'' ∧ e'' →ₙ e''') ∧
     (A →ᵦ* A' ∧ A' →ₙ A'')
   ).
 Proof.
   intros ? ? ? H.
   induction H.
-  all: intros HTy -> e' Hstep.
+  all: intros HTy e' Hstep.
 
   all: destruct Hstep as [K e1 e2 He1 He2 Hstep];subst.
   all: destruct K;simpl in *;try congruence.
@@ -1717,10 +1745,10 @@ Proof.
 
     if step in context => still typed => see paper again (page 58)
     *)
-    specialize (IHsyn_typed1 H eq_refl (fill K e2)).
+    specialize (IHsyn_typed1 H (fill K e2)).
     edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: now apply fill_step.
-    assert (TY (insert_name x0 Ke2'' ∅) ⊢ U0 : Sort sU) by admit. (* admit *)
+    assert (TY (insert_name x0 Ke2'' Γ) ⊢ U0 : Sort sU) by admit. (* Assumption step *)
     (* TODO: U0 already normalized *)
     (* assert (Pi'' = Pi x0 Ke2'' U0) as -> by admit.
     assert (exists Pi'', 
@@ -1728,20 +1756,19 @@ Proof.
     assert (
       normal_eval (Pi x0 Ke2' U0) (Pi x0 Ke2'' U0)
     ) by admit.
+    assert (A'' = Sort sT) as -> by admit. (* inversion Sort beta, norm *)
     exists (Pi x0 Ke2' U0).
     exists (Pi x0 Ke2'' U0).
     do 2 eexists.
     split;[|split;split].
-    assert (A'' = Sort sT) as -> by admit. (* inversion Sort beta, norm *)
     2-3: admit. (* easy, Pi congruence beta norm *)
-    1: constructor;eassumption.
+    1: apply typed_pi;eassumption.
     1-2: admit. (* easy, LitNat beta norm *)
 
   - (* Pi codomain *)
     (* specialize (IHsyn_typed2 H0 eq_refl (fill K e2)). *)
     edestruct IHsyn_typed2 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: assumption.
-    1: admit. (* TODO: non empty context *)
     1: eapply fill_step;eassumption.
     exists (Pi x0 T0 Ke2').
     exists (Pi x0 T0 Ke2''). (* T0 already normalized *)
@@ -1765,7 +1792,7 @@ Proof.
     special as our type recursion is on Pi not T and U
     still possible (just do 2 beta step chains) but probably individually easier
   *)
-    specialize (IHsyn_typed1 H eq_refl (fill K e2)).
+    specialize (IHsyn_typed1 H (fill K e2)).
     edestruct IHsyn_typed1 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA'&HN'A)).
     1: now apply fill_step.
     assert (A'' = Sort sT) as -> by admit. (* Sort inversion beta norm *)
@@ -1819,7 +1846,6 @@ Proof.
       H2 H2 
     ) as InvPreserve.
     edestruct InvPreserve as (e0'&e0''&A'&A''&HTye0''&(Hstepe0&Hnorme0)&(HstepA'&HnormA')).
-    1: admit. (* extend env *)
     1: eapply fill_step;eassumption.
 
 
@@ -1833,8 +1859,7 @@ Proof.
       1: eassumption. (* T did not change *)
       all: try eassumption. (* f did not change *)
       (* TODO: A'' is still typed with sort *)
-      1: admit.
-      admit. (* extended env *)
+      admit.
     }
 
     all: admit. (* easy *)
@@ -1842,7 +1867,6 @@ Proof.
   - (* body of lambda *)
 
     edestruct (IHsyn_typed4) as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)).
-    2: admit. (* extended env *)
     2: eapply fill_step;eassumption.
     1: eassumption.
 
@@ -1855,13 +1879,12 @@ Proof.
     econstructor.
     all: try eassumption.
     admit. (* TODO: A'' still Sort typed *)
-    admit. (* extended env *)
     
 
   - (* toplevel app *)
 
     assert(exists e2', e2 →ₙ e2') as [e2' He2'] by admit.
-    specialize (typed_preservation_base_step _ _ _ _ HTy Hstep He2') as HTye2'.
+    specialize (typed_preservation_base_step _ _ _ _ _ HTy Hstep He2') as HTye2'.
     do 4 eexists.
     split. 2: split;split.
     1: eassumption.
@@ -1873,7 +1896,6 @@ Proof.
   - (* step in left app *)
     edestruct (IHsyn_typed1) as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)). 
     1: assumption.
-    1: reflexivity.
     1: eapply fill_step;eassumption.
     (* 
     TODO:
@@ -1904,12 +1926,31 @@ Proof.
 
      TODO: we want →ᵦ* and norm of the type not in exists
       *)
-    assert (
+    specialize (typed_preservation_eventually_invers
+      Γ
+      v2 
+      T
+      H0 H0 
+    ) as InvPreserve.
+    edestruct InvPreserve as (v2'&v2''&T2'&T2''&HTyv2''&(Hstepv2&Hnormv2)&(HstepT2'&HnormT2')).
+    1: eassumption.
+    replace T2'' with T'' in * by admit. 
+      (* 
+      TODO:
+      needs confluence? 
+      but normalization complicated it
+      => do we need beta norm steps and their confluence?
+      *)
+
+
+
+
+    (* assert (
       exists v2' v2'',
       TY ∅ ⊢ v2'' : T'' /\
       v2 →ᵦ* v2' /\ 
       v2' →ₙ v2''
-    ) as (v2'&v2''&HTyv2&HBv2&HNv2) by admit.
+    ) as (v2'&v2''&HTyv2&HBv2&HNv2) by admit. *)
     assert(
       exists substU'',
       subst' x v2'' U'' →ₙ substU''
@@ -1964,18 +2005,31 @@ Proof.
 
     edestruct IHsyn_typed2 as (Ke2'&Ke2''&A'&A''&HTyKe2''&(HBKe2&HNKe2)&(HBA&HNA)). 
     1: assumption.
-    1: reflexivity.
     1: eapply fill_step;eassumption.
 
     (* arg steps and lambda must reciprocate steps *)
     assert(Pi x T U →ᵦ* Pi x A' U) by admit. (* easy *)
     assert(Pi x A' U →ᵦ* Pi x A'' U) by admit. (* easy *)
     (* TODO: not exactly the type to expression lemma but instead multiple steps *)
-    assert(
+
+
+    specialize (typed_preservation_eventually_invers
+      _
+      _ 
+      _
+      H H
+    ) as InvPreserve.
+    edestruct InvPreserve as (e0'&e0''&T2'&T2''&HTyv2''&(Hstepe0&Hnorme0)&(HstepT2'&HnormT2')).
+    1: eassumption.
+
+    (* TODO: confluence? Why exactly these beta steps *)
+    assert (T2'' = Pi x A'' U) as -> by admit.
+
+    (* assert(
       exists e0' e0'', 
       TY ∅ ⊢ e0'' : Pi x A'' U /\
       e0 →ᵦ* e0' /\ e0' →ₙ e0''
-    ) as (e0'&e0''&HTye0&HBe0&HNe0) by admit.
+    ) as (e0'&e0''&HTye0&HBe0&HNe0) by admit. *)
 
 
     exists (App e0' Ke2').
