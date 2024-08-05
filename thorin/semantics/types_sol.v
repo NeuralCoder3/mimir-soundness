@@ -277,7 +277,8 @@ Proof.
     econstructor.
     + eapply IHsyn_typed1.
       2-6: try eassumption.
-      all: admit. (* TODO: *)
+      1-2: eauto.
+      all: admit. (* TODO: subst in sort *)
       (* 4: eapply HnormB.
       3: reflexivity.
       1-2: eassumption.
@@ -633,7 +634,7 @@ Proof.
     constructor.
     1: eassumption.
     assert(A'' = Sort sU) as -> by admit. (* Sort inversion beta norm *)
-    admit. (* TODO: non empty context *)
+    assumption.
 
   - (* domain Type of lambda *)
   (*
@@ -954,7 +955,12 @@ typed_preservation: typed expressions reduce eventually into a type expression
 
 => every typed expression eventually reduced into a typed value
 (typed expressions don't get stuck)
+
+or it loop infinitely
+=> formulation if it terminates, it terminates in a well-typed value
 *)
+
+
 
 
 (* Lemma typed_safety e1 e2 A:
