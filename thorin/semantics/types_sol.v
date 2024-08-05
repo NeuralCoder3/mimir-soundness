@@ -464,26 +464,6 @@ Qed.
 Arguments Forall2_nth_error {_ _ _ _ _}.
 
 
-Lemma typed_preservation_base_step e e' Γ A
-  e'_norm:
-  TY Γ ⊢ e : A →
-  base_step e e' →
-  normal_eval e' e'_norm →
-  TY Γ ⊢ e'_norm : A.
-Proof.
-  intros Hty Hstep Hnorm.
-  inversion Hstep;subst.
-  inversion Hty;subst;eauto using is_val.
-  inversion H1;subst.
-
-  eapply typed_substitutivity.
-  3-4: eassumption.
-  2: eassumption.
-  1: eassumption.
-  admit. (* simple *)
-Admitted.
-
-
 
 (*
 General Preservation Idea:
@@ -508,9 +488,29 @@ A  →*β A'  →n A''
 
 *)
 
-Notation "e →ᵦ* e'" := (rtc (contextual_step) e e') (at level 50).
-Notation "e →ᵦ e'" := (contextual_step e e') (at level 50).
-Notation "e →ₙ e'" := (normal_eval e e') (at level 50).
+(*
+stronger than (probably necessary) but provable
+
+Note base_step is only toplevel (→ᵦ is also contextual)
+*)
+Lemma typed_preservation_base_step e e' Γ A
+  e'_norm:
+  TY Γ ⊢ e : A →
+  base_step e e' →
+  normal_eval e' e'_norm →
+  TY Γ ⊢ e'_norm : A.
+Proof.
+  intros Hty Hstep Hnorm.
+  inversion Hstep;subst.
+  inversion Hty;subst;eauto using is_val.
+  inversion H1;subst.
+
+  eapply typed_substitutivity.
+  3-4: eassumption.
+  2: eassumption.
+  1: eassumption.
+  admit. (* simple *)
+Admitted.
 
 Lemma fill_step K e1 e2:
   base_step e1 e2 ->
@@ -518,6 +518,126 @@ Lemma fill_step K e1 e2:
 Proof.
   econstructor;eauto.
 Qed.
+
+
+
+(* Lemma typed_preservation_eventually
+  Γ e A:
+  TY Γ ⊢ e : A →
+  forall e',
+  e →ᵦₙ* e' →
+  exists e'' A' A'',
+  A →ᵦₙ* A' ∧
+  e' →ᵦₙ* e'' ∧
+  A' →ᵦₙ* A'' ∧
+  TY Γ ⊢ e'' : A''.
+Proof.
+  intros HTy e' Hstep.
+  induction Hstep.
+  - do 3 eexists. 
+    split;[|split;[|split]].
+    1-3: constructor.
+    assumption.
+  -   
+    enough (
+      ∃ e'' A' A'' : expr, A →ᵦₙ* A' ∧ y →ᵦₙ* e'' ∧ A' →ᵦₙ* A'' ∧ TY Γ ⊢ e'' : A''
+    ).
+    {
+      destruct H0 as (?&?&?&?&?&?&?).
+      do 3 eexists.
+      split;[|split;[|split]].
+      4: apply H3.
+      1,3:eassumption.
+      admit. (* would need confluence *)
+    } 
+Abort. *)
+
+
+(*
+if typed expression takes one step
+than it can take a few more to reach a typed state.
+
+newest generalization:
+if either expression or type steps both step further to a combined finished state
+*)
+Lemma typed_preservation_eventually
+  Γ e A:
+  TY Γ ⊢ e : A →
+  forall e' A',
+  e →ᵦₙ* e' →
+  A →ᵦₙ* A' →
+  exists e'' A'',
+  e' →ᵦₙ* e'' ∧
+  A' →ᵦₙ* A'' ∧
+  TY Γ ⊢ e'' : A''.
+Proof.
+  intros HTy. 
+  induction HTy.
+  (* do not step *)
+  1,2,3,4,5,6,7: admit.
+  (* only Pi, Lam, App left *)
+  all: intros e' A' Hstepe HstepA.
+  - (* Pi *)
+    (*
+      e' = Pi x T' U'
+      s.t.
+      T →ᵦₙ* T'
+      U →ᵦₙ* U'
+
+      by IH we have 
+      typed 
+      T'' and U''
+
+      need env step as U might depend on T
+    *)
+    admit.
+  - (* Lam *)
+    (*
+      Lambda also has no toplevel step but is has dependencies directly 
+
+      each component steps and then steps to adhere to other
+      => maybe our IH is good enough, TODO: check
+
+    *)
+    admit.
+  - (* App *)
+    (*
+      either subcomponent steps or toplevel
+      (or all in different time steps)
+
+      Idea:
+      first step is toplevel
+      or steps before
+      decompose: 
+        both sides step then maybe toplevel, then maybe more
+
+      eT steps to eT' (and T might step somewhere)
+      by IH we get eT'' and T'' s.t.
+      eT'' : T''
+
+      now we know that T steps to T''
+      e steps to e 
+      and Pi x T U to Pi x T'' U
+      then we get 
+
+
+      mh do we need confluence?
+    *)
+
+
+
+  (*
+    destruct on context
+  *)
+  
+Admitted.
+
+
+
+
+
+
+
 
 (* Difference to onestep: we have →ᵦ* instead of just one step *)
 Lemma typed_preservation_eventually_invers:

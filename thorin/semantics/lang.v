@@ -1245,3 +1245,29 @@ Proof.
   intros Hnorm.
   inversion Hnorm;subst;auto.
 Qed.
+
+
+(*
+(exists full_contextual_step) \/ normalized_pred
+because 
+normalized_pred := ~ exists full_contextual_step
+*)
+
+
+Lemma normal_functional e:
+  {e' | normal_eval e e'}.
+Proof.
+Admitted.
+
+
+
+Notation "e →ᵦ e'" := (contextual_step e e') (at level 50).
+Notation "e →ₙ e'" := (normal_eval e e') (at level 50).
+Notation "e →ᵦ* e'" := (rtc (contextual_step) e e') (at level 50).
+
+Definition beta_normal_step e e' :=
+  exists e_aux, e →ᵦ e_aux /\ e_aux →ₙ e'.
+
+Notation "e →ᵦₙ e'" := (beta_normal_step e e') (at level 50).
+Notation "e →ᵦₙ* e'" := (rtc beta_normal_step e e') (at level 50).
+
