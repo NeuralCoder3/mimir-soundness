@@ -623,6 +623,8 @@ Proof.
 
       mh do we need confluence?
     *)
+    rename e into eA.
+    idtac.
 
 
 
