@@ -521,6 +521,117 @@ Qed.
 
 
 
+
+
+
+
+
+
+
+(* 
+like beta but annotated with evaluation point 
+for partial application, we want ep as first argument
+however, from the type point, ep is a non-uniform parameter
+*)
+Inductive graded_contextual_step (ep:expr) (e1 : expr) (e2 : expr) : Prop :=
+  Ectx_step K e1' e2' :
+    e1 = fill K e1' → e2 = fill K e2' →
+    ep = e1' →
+    base_step e1' e2' → graded_contextual_step ep e1 e2.
+
+Notation "e →[ ep ]ᵦ e'" := (graded_contextual_step ep e e') (at level 50).
+Notation "e →[ ep ]ᵦ* e'" := (rtc (graded_contextual_step ep) e e') (at level 50).
+
+Definition beta_normal_step ep e e' :=
+  exists e_aux, e →[ep]ᵦ e_aux /\ e_aux →ₙ e'.
+
+Notation "e →[ ep ]ᵦₙ e'" := (beta_normal_step ep e e') (at level 50).
+Notation "e →[ ep ]ᵦₙ* e'" := (rtc (beta_normal_step ep) e e') (at level 50).
+
+
+
+(*
+Idea: dependencies can only be between lambda and its argument
+=> if doing a step with ep, we need to do more of them to reach a stable state
+
+Similarly, our type change is caused by a reduction, hence the change is the same as this reduction
+*)
+
+Definition all_beta_steps b e e' :=
+  e →[b]ᵦₙ e' /\ ~ exists e'', e' →[b]ᵦ e''.
+
+Notation "e →|[ ep ] e'" := (all_beta_steps ep e e') (at level 50).
+
+Lemma typed_preservation_eventually
+  Γ e A:
+  TY Γ ⊢ e : A →
+  forall e' A' b,
+  e →|[b] e' →
+  A →|[b] A' →
+  TY Γ ⊢ e' : A'.
+Proof.
+  intros HTy. 
+  induction HTy.
+  (* do not step *)
+  1,2,3,4,5,6,7: admit.
+  (* only Pi, Lam, App left *)
+  all: intros e' A' b Hstepe HstepA.
+  - (* Pi *)
+    assert (
+      exists T' U',
+      e' = Pi x T' U' /\ 
+      T →|[b] T' /\
+      U →|[b] U'
+    ) as (T'&U'&->&HT&HU) by admit.
+    assert (A' = LitNat(sT `max` sU)) as -> by admit.
+    apply typed_pi.
+    + eapply IHHTy1;eauto.
+      admit. (* Sort -> Sort *)
+    + eapply IHHTy2.
+      admit. (* Sort -> Sort *)
+    admit.
+  - (* Lam *)
+    admit.
+  - (* App *)
+
+
+(*
+
+does not work => we have b steps but know nothing => same problem
+
+Lemma typed_preservation_eventually
+  Γ e A:
+  TY Γ ⊢ e : A →
+  forall e' A' b,
+  e →[b]ᵦₙ* e' →
+  A →[b]ᵦₙ* A' →
+  exists e'' A'',
+  e' →[b]ᵦₙ* e'' ∧
+  A' →[b]ᵦₙ* A'' ∧
+  TY Γ ⊢ e'' : A''.
+Proof.
+  intros HTy. 
+  induction HTy.
+  (* do not step *)
+  1,2,3,4,5,6,7: admit.
+  (* only Pi, Lam, App left *)
+  all: intros e' A' b Hstepe HstepA.
+  - (* Pi *)
+    admit.
+  - (* Lam *)
+    admit.
+  - (* App *)
+    rename e into eA.
+    idtac.
+    assert  (
+      exists eT',
+      eT →[ b ]ᵦₙ* eT' /\ 
+      e' = eA eT'
+    ) as (eT'&HstepeT&->) by admit.
+ *)
+
+
+
 (* Lemma typed_preservation_eventually
   Γ e A:
   TY Γ ⊢ e : A →
