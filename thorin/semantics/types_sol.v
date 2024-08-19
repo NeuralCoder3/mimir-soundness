@@ -587,12 +587,100 @@ Proof.
     apply typed_pi.
     + eapply IHHTy1;eauto.
       admit. (* Sort -> Sort *)
-    + eapply IHHTy2.
+    + replace (T') with T by admit. (* step in env *)
+      eapply IHHTy2;eauto.
       admit. (* Sort -> Sort *)
-    admit.
   - (* Lam *)
-    admit.
+    rename e into eB.
+    assert(
+      exists T' ef' U' eB',
+      T →|[b] T' /\
+      U →|[b] U' /\
+      ef →|[b] ef' /\
+      eB →|[b] eB' /\
+      e' = Lam x T' ef' U' eB'
+    ) as (
+      T'&ef'&U'&eB'&
+      HT&HU&Hef&HeB&->
+    ) by admit.
+
+    assert (
+      exists T'' U'',
+      A' = Pi x T'' U'' /\ 
+      T →|[b] T'' /\
+      U →|[b] U''
+    ) as (T''&U''&->&HT2&HU2) by admit.
+
+    replace T'' with T' by admit. (* Deterministic →| *)
+    replace U'' with U' by admit. (* Deterministic →| *)
+    econstructor.
+    1: {
+      eapply IHHTy1;eauto.
+      admit. (* Sort -> Sort *)
+    }
+    all: replace T' with T by admit. (* step in env *)
+    + eapply IHHTy2;eauto. admit. (* Sort -> Sort *)
+    + eapply IHHTy3;eauto. admit. (* Bool -> Bool *)
+    + eapply IHHTy4;eauto.
+
+
   - (* App *)
+    rename e into eL.
+    rename U' into sU.
+    rename A' into sU'.
+
+    (* simplified case *)
+    assert(
+      exists eL' eT',
+      eL →|[b] eL' /\
+      eT →|[b] eT' /\
+      e' = eL' eT'
+    ) as (eL'&eT'&HeL&HeT&->) by admit.
+
+    assert (
+      exists T' U',
+      Pi x T U →|[b] Pi x T' U' /\
+      T →|[b] T' /\
+      U →|[b] U'
+    ) as (T'&U'&HPi&HT&HU) by admit.
+
+    econstructor.
+    1: {
+      eapply IHHTy1;eauto.
+    }
+    1: {
+      eapply IHHTy2;eauto.
+    }
+    (*
+      here is an important difference to general beta
+      (or eval to value directly)
+
+      U[eT/x] ->n sU
+      sU ->| sU'
+      U ->| U'
+      eT ->| eT'
+
+
+      we want: 
+      U'[eT'/x] ->n sU'
+
+      idea:
+      sU does all its eval steps in eT' and the one in U
+      TODO: why no overlap => why not sub into b? (e.g. why are U subst sites not destroyed)
+
+      b does not change eT 
+      or it is closed in the env of eT
+
+      x free in b:
+        eT' = eT
+
+      x not free in b:
+        subst x does not interfere with eval points (just might add some)
+        i.e. subst x expr b = b
+        statement holds
+    *)
+    admit.
+Qed.
 
 
 (*
