@@ -571,6 +571,7 @@ Lemma typed_preservation_eventually
   TY Γ ⊢ e' : A'.
 Proof.
   intros HTy. 
+  pose proof (HTyCpy := HTy).
   induction HTy.
   (* do not step *)
   1,2,3,4,5,6,7: admit.
