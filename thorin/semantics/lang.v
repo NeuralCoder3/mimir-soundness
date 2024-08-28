@@ -463,7 +463,9 @@ Inductive is_val : expr → Prop :=
   (* atomic values *)
   (* | StarV : is_val Star
   | BoxV : is_val Box *)
-  | VarV x : is_val (Var x) (* or talk about closed for preservation *)
+  (* or talk about closed for preservation *)
+  (* Var should not be value otherwise, we destroy canonical value lemmas *)
+  (* | VarV x : is_val (Var x)  *)
   | SortV n : is_val (Sort n)
   | BotV : is_val Bot
   | NatV : is_val Nat
@@ -866,7 +868,7 @@ Lemma characterize_value e:
 Proof.
   intros H.
   induction e;try now econstructor.
-  (* - admit. (* var -- ruled out by typed *) *)
+  - admit. (* var -- ruled out by typed *)
   - econstructor.
     1: apply IHe1.
     2: apply IHe2.

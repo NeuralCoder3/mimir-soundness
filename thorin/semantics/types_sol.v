@@ -415,6 +415,25 @@ Progress
 e is a value or
 exists e' s.t. e -> e'
 *)
+(*
+  TODO: need empty env => variable is not a value and not reducible
+*)
+(*
+but this does not work for U in Pi, for instance, we need a different env
+=> reduction under binder
+Corollary typed_progress e A:
+  TY ∅ ⊢ e : A →
+  is_val e ∨ reducible e.
+Proof.
+  intros HTy.
+  remember ∅ as Γ eqn:HΓ.
+  induction HTy.
+  all: subst;eauto 10 using is_val.
+  - admit. (* in empty env, we would not have var *)
+  - (* Pi *)
+*)
+
+
 Corollary typed_progress Γ e A:
   TY Γ ⊢ e : A →
   is_val e ∨ reducible e.
@@ -422,6 +441,7 @@ Proof.
   intros HTy.
   induction HTy.
   all: subst;eauto 10 using is_val.
+  - admit. (* in empty env, we would not have var *)
   - (* Pi *)
     destruct IHHTy1 as [HvalT|[? ?]].
     + destruct IHHTy2 as [HvalU|[? ?]].
@@ -444,7 +464,7 @@ Proof.
       left. constructor.
     + right. eexists. eapply base_contextual_step.
       eapply BetaS. reflexivity.
-Qed.
+Admitted.
 
 
 Lemma Forall2_nth_error {X Y:Type} (P: X -> Y -> Prop) xs ys:
