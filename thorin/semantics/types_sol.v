@@ -578,9 +578,21 @@ Similarly, our type change is caused by a reduction, hence the change is the sam
 *)
 
 Definition all_beta_steps b e e' :=
-  e →[b]ᵦₙ e' /\ ~ exists e'', e' →[b]ᵦ e''.
+  e →[b]ᵦₙ* e' /\ ~ exists e'', e' →[b]ᵦ e''.
 
 Notation "e →|[ ep ] e'" := (all_beta_steps ep e e') (at level 50).
+
+(*
+single or uncoordinated parallel steps are not enough
+for typing, we need special steps
+
+=> we need to do all (maybe direct not recursive) "special" steps 
+
+TODO: can be do all steps instead?
+
+*)
+
+
 
 Lemma typed_preservation_eventually
   Γ e A:
@@ -674,7 +686,8 @@ Proof.
     }
     (*
       here is an important difference to general beta
-      (or eval to value directly)
+      (or eval to value directly):
+      - 
 
       U[eT/x] ->n sU
       sU ->| sU'
@@ -682,8 +695,26 @@ Proof.
       eT ->| eT'
 
 
+
       we want: 
       U'[eT'/x] ->n sU'
+
+
+      we have (subst lemma)
+      U[eT/x] ->* normalized(U'[eT'/x])
+
+      and U[eT/x] ->| sU'
+
+      by triangle lemma
+      U'[eT'/x] ->| sU'
+      but we need that normalization is enough
+
+
+
+      by uniqueness of normalization, this is sU'
+
+
+
 
       idea:
       sU does all its eval steps in eT' and the one in U
@@ -699,6 +730,9 @@ Proof.
         subst x does not interfere with eval points (just might add some)
         i.e. subst x expr b = b
         statement holds
+
+      if x free:
+        then unify all free vars => anything that is placed in for x can be unified with x => use it
     *)
     admit.
 Qed.
