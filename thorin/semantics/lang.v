@@ -458,6 +458,11 @@ Inductive normalized : expr -> Prop :=
 
   applications and extracts are not values
 *)
+Definition is_lam (e:expr) :=
+  match e with
+  | Lam _ _ _ _ _ => True
+  | _ => False
+  end.
 Inductive is_val : expr → Prop :=
 (* with is_val : expr → Prop := *)
   (* atomic values *)
@@ -465,7 +470,11 @@ Inductive is_val : expr → Prop :=
   | BoxV : is_val Box *)
   (* or talk about closed for preservation *)
   (* Var should not be value otherwise, we destroy canonical value lemmas *)
-  (* | VarV x : is_val (Var x)  *)
+  | VarV x : is_val (Var x) 
+  | AppV v1 v2: 
+    (* not lambda *)
+    ~is_lam v1 →
+    is_val v1 → is_val v2 → is_val (App v1 v2)
   | SortV n : is_val (Sort n)
   | BotV : is_val Bot
   | NatV : is_val Nat
@@ -844,6 +853,8 @@ Proof.
   destruct H as [K e1 e2 -> -> Hred].
   induction K;simpl in Hv;inversion Hv;subst;try congruence.
   all: try (now inversion Hred).
+  - inversion Hred. subst.
+    now contradict H.
   - destruct K; simpl in *;inversion H0;subst.
     now contradict IHK.
   - (* Idx #n, Idx -> ... *)
@@ -868,7 +879,7 @@ Lemma characterize_value e:
 Proof.
   intros H.
   induction e;try now econstructor.
-  - admit. (* var -- ruled out by typed *)
+  (* admit. (* var -- ruled out by typed *) *)
   - econstructor.
     1: apply IHe1.
     2: apply IHe2.

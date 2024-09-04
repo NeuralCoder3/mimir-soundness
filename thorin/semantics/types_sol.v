@@ -543,6 +543,35 @@ Qed.
 
 
 
+Definition equivalent e1 e2 :=
+  exists e', e1 →ᵦₙ* e' ∧ e2 →ᵦₙ* e'.
+
+Notation "e1 ≡ e2" := (equivalent e1 e2) (at level 70).
+
+(*
+if two expressions are typed and equivalent
+then their types are equivalent
+*)
+Lemma equivalent_types e1 e2 A1 A2 Γ:
+  TY Γ ⊢ e1 : A1 →
+  TY Γ ⊢ e2 : A2 →
+  e1 ≡ e2 →
+  A1 ≡ A2.
+Proof.
+  intros HTy1 HTy2 Heq.
+  destruct Heq as [e' [H1 H2]].
+  induction H1 in e2,H2,HTy1,HTy2 |-*.
+  - admit. (* base step *)
+  - admit. (* transitivity *)
+
+  (*
+  
+  could go e1 last step to e'
+  now back what is intermediate
+
+  e' does not necessarily need to be typed
+  *)
+
 
 
 
@@ -684,6 +713,8 @@ Proof.
     1: {
       eapply IHHTy2;eauto.
     }
+
+
     (*
       here is an important difference to general beta
       (or eval to value directly):
@@ -708,6 +739,12 @@ Proof.
       by triangle lemma
       U'[eT'/x] ->| sU'
       but we need that normalization is enough
+
+
+      Steps after sub can be done before
+      and no relevant step contradicted by subst
+      but:
+      argument is a lambda => creates redex after subst
 
 
 
