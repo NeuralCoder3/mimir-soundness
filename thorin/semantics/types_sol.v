@@ -543,6 +543,122 @@ Qed.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+(*
+just symmetry, refl, trans +
+(lam A. B) C = B [x := C]
+
+or via beta
+*)
+Definition equiv (A B:expr) := True.
+Notation "A ≡ᵦ B" := (equiv A B) (at level 70).
+
+
+Reserved Notation "'TY' Γ ⊢ᵦ e : A" (at level 74, e, A at next level).
+Reserved Notation "'TY' Γ ⊢ᵦ A ← e" (at level 74, e, A at next level).
+Inductive beta_syn_typed : typing_context → expr → expr → Prop :=
+   | beta_typed_sort Γ n:
+      TY Γ ⊢ᵦ Sort n : Sort (S n)
+   | beta_typed_bot Γ:
+      TY Γ ⊢ᵦ Bot : Star
+   | beta_typed_nat Γ:
+      TY Γ ⊢ᵦ Nat : Star
+   | beta_typed_idx Γ:
+      TY Γ ⊢ᵦ Idx : (Pi BAnon Nat Star)
+   | beta_typed_lit_nat Γ n:
+      TY Γ ⊢ᵦ (#n)%E : Nat
+    | beta_typed_lit_idx Γ n i:
+      TY Γ ⊢ᵦ (LitIdx n i) : (App Idx n)
+    | beta_typed_var Γ x A :
+      Γ !! x = Some A →
+      TY Γ ⊢ᵦ (Var x) : A
+    | beta_typed_pi Γ T sT x U sU:
+      TY Γ ⊢ᵦ T : Sort sT →
+      TY (insert_name x T Γ) ⊢ᵦ U : Sort sU →
+      TY Γ ⊢ᵦ (Pi x T U) : (max sT sU)
+    | beta_typed_lam Γ x T ef U e sT sU:
+      TY Γ ⊢ᵦ T : Sort sT →
+      TY (insert_name x T Γ) ⊢ᵦ U : Sort sU →
+
+      TY (insert_name x T Γ) ⊢ᵦ ef : Bool →
+      TY (insert_name x T Γ) ⊢ᵦ e : U →
+      TY Γ ⊢ᵦ (Lam x T ef U e) : (Pi x T U)
+    | beta_typed_app Γ e eT x T U U':
+      TY Γ ⊢ᵦ e : (Pi x T U) →
+      TY Γ ⊢ᵦ eT : T →
+      normal_eval (subst' x eT U) U' →
+      TY Γ ⊢ᵦ (App e eT) : U'
+    | beta_typed_conv Γ e A B:
+      TY Γ ⊢ᵦ e : A →
+      A ≡ᵦ B →
+      TY Γ ⊢ᵦ e : B
+where "'TY' Γ ⊢ᵦ e : A" := (beta_syn_typed Γ e%E A%E)
+.
+#[export] Hint Constructors beta_syn_typed : core.
+
+Lemma beta_preservation Γ e e' A:
+  TY Γ ⊢ᵦ e : A ->
+  e →ᵦₙ e' ->
+  TY Γ ⊢ᵦ e' : A.
+Proof.
+  intros HTy Hstep.
+  destruct Hstep as [e'' [Hbeta Hnorm]].
+  destruct Hbeta as [K e1 e2 -> -> Hstep].
+  dependent induction HTy.
+  - admit. (* Sort *)
+  - admit. (* Bot *)
+  - admit. (* Nat *)
+  - admit. (* Idx *)
+  - admit. (* LitNat *)
+  - admit. (* LitIdx *)
+  - admit. (* Var *)
+
+  - admit. (* Pi *)
+  - admit. (* Lam *)
+  - (* App *)
+    (* case left *)
+    (* case right *)
+    (* case toplevel *)
+    assert (K=HoleCtx) as -> by admit.
+    simpl in *.
+    subst.
+    inversion Hstep;subst.
+    (* inversion HTy1;subst. *) 
+    (* we have problem to know norm result *)
+  - (* equiv *)
+    eapply beta_typed_conv.
+    1: {
+      eapply IHHTy.
+      all: try eassumption.
+      reflexivity.
+    }
+    assumption.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Definition equivalent e1 e2 :=
   exists e', e1 →ᵦₙ* e' ∧ e2 →ᵦₙ* e'.
 
