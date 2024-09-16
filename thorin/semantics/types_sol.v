@@ -442,12 +442,16 @@ Proof.
   induction HTy.
   all: subst;eauto 10 using is_val.
   - admit. (* in empty env, we would not have var *)
+  (* 
   - (* Pi *)
     destruct IHHTy1 as [HvalT|[? ?]].
     + destruct IHHTy2 as [HvalU|[? ?]].
-      * left. now constructor.
+      (* * destruct IHHTy4 as [Hvale|[? ?]];[|right;eexists;eauto].
+        left. 
+        now constructor. *)
       * right. eexists. eauto.
     + right. eexists. eauto.
+    *)
   - (* Lambda *)
     destruct IHHTy4 as [Hvale|[? ?]];[|right;eexists;eauto].
     destruct IHHTy2 as [HvalU|[? ?]];[|right;eexists;eauto].
@@ -615,25 +619,153 @@ Proof.
   intros HTy Hstep.
   destruct Hstep as [e'' [Hbeta Hnorm]].
   destruct Hbeta as [K e1 e2 -> -> Hstep].
-  dependent induction HTy.
+  revert e2 Hstep e' Hnorm.
+  dependent induction HTy;intros e2 Hstep e' Hnorm;cbn in *.
+  all: try now (destruct K;cbn in *;inversion x;subst;inversion Hstep).
+  (* 
   - admit. (* Sort *)
   - admit. (* Bot *)
-  - admit. (* Nat *)
+  - (* Nat *)
+    destruct K;cbn in *;inversion x;subst;inversion Hstep.
   - admit. (* Idx *)
   - admit. (* LitNat *)
   - admit. (* LitIdx *)
   - admit. (* Var *)
+  *)
 
-  - admit. (* Pi *)
-  - admit. (* Lam *)
+  - (* Pi *)
+    destruct K;cbn in *;inversion x;subst.
+    + inversion Hstep.
+    + (* step in Type *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Pi x1 Ke2' U0
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_pi.
+      * eapply IHHTy1;eauto.
+      * (* step in context *)
+        admit.
+    + (* step in codom *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Pi x1 T0 Ke2'
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_pi.
+      * eassumption.
+      * eapply IHHTy2;eauto.
+  - (* Lam *)
+    destruct K;cbn in *;inversion x;subst.
+    + inversion Hstep.
+    + (* step in Type *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Lam x1 Ke2' f U0 e0
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_conv.
+      eapply beta_typed_lam;eauto.
+      1-3: admit. (* step in context *)
+      admit. (* beta conversion *)
+    + (* step in codom *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Lam x1 T0 f Ke2' e0
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_conv.
+      eapply beta_typed_lam;eauto.
+      * eapply beta_typed_conv.
+        1: eassumption.
+        admit. (* beta conversion *)
+      * admit. (* beta conversion *)
+    + (* body *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Lam x1 T0 f U0 Ke2'
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_lam;eauto.
   - (* App *)
+    destruct K;cbn in *;inversion x;subst.
     (* case left *)
+    2: {
+      (* maybe normalize evaluates redex *)
+      assert(exists Ke2',
+        fill K e2 →ₙ Ke2'
+      ) as [Ke2' HKe2norm] by admit.
+      assert (TY Γ ⊢ᵦ Ke2' v2 : U') as Hty.
+      {
+        eapply beta_typed_app.
+        - eapply IHHTy1;eauto.
+        - eauto.
+        - eauto.
+      }
+      (* if normalization of toplevel redex => done *)
+
+      assert (base_step (App Ke2' v2) e') as Hstep' by admit.
+
+      inversion Hstep';subst.
+      pose proof typed_substitutivity.
+      specialize (H0 elam v2 Γ x1).
+      specialize (H0 T).
+      replace (syn_typed) with beta_syn_typed in H0 by admit.
+      assert(TY (insert_name x1 T Γ) ⊢ᵦ elam : U0) as Htyelam by admit.
+      (* assert (x=x0) as ->.  {
+        inversion HTy1;eauto.
+        admit.
+      } *)
+      specialize (H0 U0 Γ).
+
+      inversion Hty;subst.
+      2: {
+        admit.
+      }
+      inversion H3;subst.
+      2: {
+        admit.
+      }
+      eapply H0;eauto.
+      1: admit.
+      admit.
+    }
     (* case right *)
+    2: {
+      assert(exists Ke2',
+        fill K e2 →ₙ Ke2'
+      ) as [Ke2' HKe2norm] by admit.
+      assert (TY Γ ⊢ᵦ e0 Ke2' : U') as Hty.
+      {
+        eapply beta_typed_app.
+        - eauto.
+        - eapply IHHTy2;eauto.
+        - admit. (* TODO *)
+      }
+      admit.
+    }
+    (* admit. *)
     (* case toplevel *)
-    assert (K=HoleCtx) as -> by admit.
-    simpl in *.
-    subst.
+    (* assert (K=HoleCtx) as -> by admit. *)
+    (* simpl in *.
+    subst. *)
     inversion Hstep;subst.
+    Check typed_substitutivity.
+    pose proof typed_substitutivity.
+    specialize (H1 elam eT Γ x).
+    specialize (H1 T).
+    replace (syn_typed) with beta_syn_typed in H1 by admit.
+    (* assert(exists B',
+      TY (insert_name x T Γ) ⊢ᵦ elam : B'
+    ) as [B' Htyelam] by admit. *)
+    assert(TY (insert_name x T Γ) ⊢ᵦ elam : U) as Htyelam by admit.
+    assert (x=x0) as ->.  {
+      inversion HTy1;eauto.
+      admit.
+    }
+    specialize (H1 U Γ e').
+    eapply H1;eauto.
+    admit.
     (* inversion HTy1;subst. *) 
     (* we have problem to know norm result *)
   - (* equiv *)
@@ -644,6 +776,7 @@ Proof.
       reflexivity.
     }
     assumption.
+Admitted.
 
 
 
