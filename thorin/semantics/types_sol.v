@@ -704,9 +704,22 @@ Proof.
       }
       (* if normalization of toplevel redex => done *)
 
-      assert (base_step (App Ke2' v2) e') as Hstep' by admit.
+      (* just case distinction on normalization? *)
+      (*
+        e1 e2 ->n en
+        e1 ->n e1n
+        e2 ->n e2n
 
+        en = e1n e2n \/ e1n e2n toplevel normalize to en' and en' ->n en
+      *)
+
+
+      (* assert (base_step (App Ke2' v2) e') as Hstep' by admit. *)
+      assert (normalize_step (App Ke2' v2) e') as Hstep' by admit.
       inversion Hstep';subst.
+      rename eb into elam.
+
+      (* inversion Hstep';subst. *)
       pose proof typed_substitutivity.
       specialize (H0 elam v2 Γ x1).
       specialize (H0 T).
@@ -720,29 +733,32 @@ Proof.
 
       inversion Hty;subst.
       2: {
-        admit.
+        admit. (* TODO: subst in elam is typed *)
       }
       inversion H3;subst.
       2: {
-        admit.
+        admit. (* TODO: beta case *)
       }
       eapply H0;eauto.
-      1: admit.
-      admit.
+      1: admit. (* TODO: normalize on normalized values *)
+      admit. (* env subst *)
     }
     (* case right *)
     2: {
       assert(exists Ke2',
         fill K e2 →ₙ Ke2'
       ) as [Ke2' HKe2norm] by admit.
+      assert (exists Ue2', subst' x0 Ke2' U →ₙ Ue2') as [Ue2' HUe2norm] by admit.
       assert (TY Γ ⊢ᵦ e0 Ke2' : U') as Hty.
       {
+        eapply beta_typed_conv with (A:=Ue2').
         eapply beta_typed_app.
         - eauto.
         - eapply IHHTy2;eauto.
-        - admit. (* TODO *)
+        - assumption.
+        - admit. (* beta under subst *)
       }
-      admit.
+      admit. (* toplevel case *)
     }
     (* admit. *)
     (* case toplevel *)
@@ -760,12 +776,12 @@ Proof.
     ) as [B' Htyelam] by admit. *)
     assert(TY (insert_name x T Γ) ⊢ᵦ elam : U) as Htyelam by admit.
     assert (x=x0) as ->.  {
-      inversion HTy1;eauto.
-      admit.
+      inversion HTy1;subst;eauto.
+      admit. (* type conversion case *)
     }
     specialize (H1 U Γ e').
     eapply H1;eauto.
-    admit.
+    admit. (* subst in env *)
     (* inversion HTy1;subst. *) 
     (* we have problem to know norm result *)
   - (* equiv *)
