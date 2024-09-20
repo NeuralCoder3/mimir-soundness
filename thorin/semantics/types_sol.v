@@ -611,6 +611,279 @@ where "'TY' Γ ⊢ᵦ e : A" := (beta_syn_typed Γ e%E A%E)
 .
 #[export] Hint Constructors beta_syn_typed : core.
 
+
+
+Lemma subst_sort x e n:
+  subst' x e (Sort n) = Sort n.
+Proof.
+  destruct x; reflexivity.
+Qed.
+
+Lemma normalize_sort n e:
+  Sort n →ₙ e -> 
+  e = Sort n.
+Proof.
+  intros H.
+  inversion H;subst.
+  inversion H0;subst.
+  1: reflexivity.
+  inversion H2;subst.
+  destruct K;simpl in *;inversion H4;subst.
+  inversion H6.
+Qed.
+
+Lemma normalized_app e1 e2:
+  normalized_pred (e1 e2) ->
+  normalized_pred e1 ∧ normalized_pred e2.
+Proof.
+  intros H.
+  (* unfold normalized_pred in H. *)
+  split.
+  - unfold normalized_pred in *.
+    contradict H.
+    destruct H as [e1' [K ei1 ei2 He1]].
+    exists (e1' e2).
+    econstructor.
+    instantiate (2:= FApp1 K e2).
+    all: simpl;f_equal;eauto.
+  - (* analogous *)
+    unfold normalized_pred in *.
+    contradict H.
+    destruct H as [e2' [K ei1 ei2 He2]].
+    exists (e1 e2').
+    econstructor.
+    instantiate (2:= FApp2 e1 K).
+    all: simpl;f_equal;eauto.
+Qed.
+
+
+Lemma app_norm e1 e2 en:
+  e1 e2 →ₙ en ->
+  (
+    exists e1' e2', 
+    e1 →ₙ e1' /\ e2 →ₙ e2' /\ 
+    (
+      en = e1' e2' \/
+      (exists e',
+        normalize_step (e1' e2') e' /\
+        e' →ₙ en
+      )
+    )
+  ).
+Proof.
+  intros H.
+  inversion H;subst.
+  dependent induction H0.
+  (* look at full_contextual_steps and whether one is toplevel
+    if -> found point 
+    else: recursion
+  *)
+  - exists e1, e2.
+    apply normalized_app in H1 as [Hn1 Hn2].
+    split;[|split].
+    3: eauto.
+    all: constructor;eauto;constructor.
+  - destruct H1.
+    assert (K = FHoleCtx \/ exists K', K = FApp1 K' e2 \/ K = FApp2 e1 K') as [->|[K' [-> | ->]]].
+    {
+      subst.
+      destruct K;simpl in *;inversion H1;subst;eauto.
+    }
+    + simpl in *;subst.
+      (* TODO:
+      these are e1 ->n e1' and e2 ->n e2'
+      do these need to be full to end normalizations? (probably?)
+      => TODO: need to restrict full_contextual_steps to have normalized subexpression
+       *)
+      exists e1, e2.
+      assert(
+        normalized_pred e1 ∧ normalized_pred e2
+      ) as [Hn1 Hn2].
+      {
+        inversion H4;subst.
+      }
+      split;[|split].
+      3: {
+       right.
+       exists e2'.
+       split;eauto.
+       constructor;eassumption.
+      }
+      all: constructor;eauto;constructor.
+    + (* not toplevel => just continue *)
+      simpl in *;subst.
+      inversion H1;subst.
+      specialize (IHrtc (full_fill K' e2') e2).
+      edestruct IHrtc as [f1 [f2 [Hf1 [Hf2 [-> | [f' [Hstep Hnorm]]]]]]];eauto.
+      1: constructor;eauto.
+      * exists f1, f2. 
+        split;[|split].
+        2-3: eauto.
+        destruct Hf1.
+        constructor;eauto.
+        econstructor.
+        2: eassumption.
+        econstructor;eauto.
+      * exists f1, f2.
+        split;[|split].
+        2: assumption.
+        1: {
+          destruct Hf1.
+          constructor;eauto.
+          econstructor.
+          2: eauto.
+          econstructor;eauto.
+        }
+        right.
+        exists f'. 
+        split;eauto.
+Admitted.
+
+
+
+
+
+
+Lemma beta_typed_substitutivity e e' Γ (a: binder) A B 
+  Γ' e'_norm B'_norm:
+  TY Γ ⊢ᵦ e' : A →
+  TY (insert_name a A Γ) ⊢ᵦ e : B →
+  normal_eval (lang.subst' a e' e) e'_norm →
+  normal_eval (lang.subst' a e' B) B'_norm →
+  (forall x v,
+    Γ !! x = Some v <-> (exists k, Γ' !! x = Some k /\ normal_eval (subst' a e' v) k)) ->
+    (* /\ Γ' !! x = Some v -> (exists k, Γ' !! x = Some k /\ normal_eval (subst' a e' v) k) -> *)
+  TY Γ' ⊢ᵦ e'_norm : B'_norm.
+Proof.
+  assert (lang.subst' a e' A = A) as HsubstA by admit.
+  intros He' H Hnorme HnormB HΓ.
+  (* 
+  induction e + inversion lemmas alone are not enough due to dependencies
+  subst B : ... is missing => needs hypothesis 
+  *)
+  revert Γ' e'_norm B'_norm Hnorme HnormB HΓ.
+  dependent induction H;simpl;eauto.
+  all: intros Γ' e'_norm B'_norm Hnorme HnormB HΓ.
+  - (* Sort *)
+    rewrite subst_sort in Hnorme.
+    rewrite subst_sort in HnormB.
+    apply normalize_sort in Hnorme as ->.
+    apply normalize_sort in HnormB as ->.
+    econstructor.
+  - (* Bot *)
+    replace e'_norm with Bot by admit.
+    replace B'_norm with Star by admit.
+    econstructor.
+  - (* Nat *)
+    replace e'_norm with Nat by admit.
+    replace B'_norm with Star by admit.
+    econstructor.
+  - (* Idx *)
+    replace e'_norm with Idx by admit.
+    replace B'_norm with (Pi BAnon Nat Star) by admit.
+    econstructor.
+  - (* LitNat *)
+    replace e'_norm with (#n)%E by admit.
+    replace B'_norm with Nat by admit.
+    econstructor.
+  - (* LitIdx *)
+    replace e'_norm with (LitIdx n i) by admit.
+    replace B'_norm with (App Idx n) by admit.
+    econstructor.
+  - (* Var *)
+    replace e'_norm with (Var x) by admit.
+    (* needs Environment normalized *)
+    econstructor.
+    admit. (* relate Γ and Γ' *)
+  - (* Pi *)
+    replace (subst' a e' (Pi x T U)) with (Pi x (subst' a e' T) (subst' a e' U)) in Hnorme by admit.
+    (* destruct decide in Hnorme;[admit|]. *)
+    assert(
+      exists T' U',
+      e'_norm = Pi x T' U' /\
+      normal_eval (subst' a e' T) T' /\
+      normal_eval (subst' a e' U) U'
+    ) as [T' [U' [He'_norm [HnormT HnormU]]]] by admit.
+    subst.
+    simpl in HnormB.
+    replace (B'_norm) with (LitNat(max sT sU)) by admit.
+    econstructor.
+    + eapply IHbeta_syn_typed1.
+      4: eapply HnormT.
+      4: admit. (* Sort norm *)
+      2: eassumption.
+      1: eassumption.
+      reflexivity.
+      eassumption.
+    + eapply IHbeta_syn_typed2.
+      4: eassumption.
+      4: admit. (* Sort norm *)
+      1-2: eassumption.
+      admit. (* different order insert *)
+      (* eassumption. *)
+      admit. (* Γ' *)
+  - (* Lambda *)
+    replace (subst' a e' (Lam x T ef U e)) with (Lam x (subst' a e' T) (subst' a e' ef) (subst' a e' U) (subst' a e' e)) in Hnorme by admit.
+    pose proof HnormB as HnormB2.
+    replace (subst' a e' (Pi x T U)) with (Pi x (subst' a e' T) (subst' a e' U)) in HnormB2 by admit.
+    assert(
+      exists T' U' ef' e'',
+      e'_norm = Lam x T' ef' U' e'' /\
+      normal_eval (subst' a e' T) T' /\
+      normal_eval (subst' a e' ef) ef' /\
+      normal_eval (subst' a e' U) U'
+    ) as [T' [U' [ef' [e'' [He'_norm [HnormT [Hnormef HnormU]]]]]]] by admit.
+    subst.
+    assert(
+      exists T'' U'',
+      B'_norm = Pi x T'' U'' /\
+      normal_eval (subst' a e' T) T'' /\
+      normal_eval (subst' a e' U) U''
+    ) as [T'' [U'' [HB'_norm [HnormT' HnormU']]]] by admit.
+    subst.
+    (* confluence of normalize *)
+    assert (T' = T'') as -> by admit.
+    assert (U' = U'') as -> by admit. 
+    econstructor.
+    + eapply IHbeta_syn_typed1.
+      2-6: try eassumption.
+      1-2: eauto.
+      all: admit. (* TODO: subst in sort *)
+      (* 4: eapply HnormB.
+      3: reflexivity.
+      1-2: eassumption.
+      admit. (* TODO: where does s come from *)
+      eassumption. *)
+    + eapply IHbeta_syn_typed2.
+      4: eassumption.
+      1-2: eassumption.
+      1: admit. (* insert order *)
+      admit. (* bool norm bool *)
+      admit. (* Γ' *)
+    + admit. (* TODO: assignability induction *)
+    + admit. (* TODO: *)
+  - (* App *)
+    (* norm can beta or just norm in subterms *)
+    replace(subst' a e' (e eT)) with ((subst' a e' e) (subst' a e' eT)) in Hnorme.
+    2: {
+      destruct a; simpl;reflexivity.
+    }
+    assert(
+      exists se' seT',
+      subst' a e' e →ₙ se' /\
+      subst' a e' eT →ₙ seT' /\
+      e'_norm = App se' seT'
+    ) as [se' [seT' [Hse' [HseT' ->]]]] by admit.
+    eapply beta_typed_app.
+    + eapply IHbeta_syn_typed1;eauto. admit. (* type norm *)
+    + eapply IHbeta_syn_typed2;eauto. admit. (* type norm *)
+Admitted.
+
+
+
+
+
+
 Lemma beta_preservation Γ e e' A:
   TY Γ ⊢ᵦ e : A ->
   e →ᵦₙ e' ->
@@ -793,6 +1066,73 @@ Proof.
     }
     assumption.
 Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -332,14 +332,47 @@ Fixpoint full_fill (K:full_ectx) (e:expr) : expr :=
   | FExtract2 eb K => Extract eb (full_fill K e) *)
   end.
 
+
+(* Definition normalizable (e : expr) :=
+  ∃ e', full_contextual_step e e'. *)
+
+(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K (e1_lam' e1_arg':expr) e2' :
+  (* maybe normalized e1' and e2' already *)
+    e1 = full_fill K (App e1_lam' e1_arg') → 
+    e2 = full_fill K e2' →
+    normalize_step (App e1_lam' e1_arg') e2' → 
+    full_contextual_step e1 e2
+with normalized_pred (e : expr) :=
+  | norm_pred : ~ (∃ e', full_contextual_step e e') -> normalized_pred e. *)
+
+
+(* Fixpoint full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  exists K e1' e2',
+    normalized e1' ∧
+    e1 = full_fill K e1' ∧ e2 = full_fill K e2' ∧ normalize_step e1' e2'
+with normalized_pred (e:expr) := ~ exists e', full_contextual_step e e'. *)
+
+
 Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
   Fectx_step K e1' e2' :
+  (* maybe normalized e1' and e2' already *)
+    e1 = full_fill K e1' → e2 = full_fill K e2' →
+    (* normalized_pred (full_contextual_step) e1' →  *)
+    normalize_step e1' e2' → full_contextual_step e1 e2.
+
+(* Definition normalized_pred (step:expr -> expr -> Prop) (e : expr) :=
+  ~ ∃ e', step e e'. *)
+
+
+(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K e1' e2' :
+  (* maybe normalized e1' and e2' already *)
     e1 = full_fill K e1' → e2 = full_fill K e2' →
     normalize_step e1' e2' → full_contextual_step e1 e2.
 
-Definition normalizable (e : expr) :=
-  ∃ e', full_contextual_step e e'.
-
+Definition normalized_pred (e : expr) :=
+  ~ ∃ e', full_contextual_step e e'. *)
 Definition normalized_pred (e : expr) :=
   ~ ∃ e', full_contextual_step e e'.
 
@@ -521,6 +554,65 @@ Inductive is_val : expr → Prop :=
     is_val e →
     is_val (Pack x en e) *)
   .
+
+
+Lemma norm_sound e: 
+    normalized e -> normalized_pred e.
+Proof.
+  induction 1.
+  all:unfold normalized_pred;intros [e' Hstep].
+  (* all: revert Hstep. *)
+  all:inversion Hstep;subst.
+  (* all: revert H. *)
+  1-7: destruct K;simpl in *;inversion H;subst.
+  1-7: now inversion H1.
+  1: {
+    destruct K;simpl in *;inversion H1;subst.
+    - inversion H3.
+    - unfold normalized_pred in IHnormalized1.
+      contradict IHnormalized1.
+      eexists.
+      econstructor;eauto.
+    - unfold normalized_pred in IHnormalized2.
+      contradict IHnormalized2.
+      eexists.
+      econstructor;eauto.
+  }
+  1: {
+    destruct K;simpl in *;inversion H3;subst.
+    - inversion H5.
+    - unfold normalized_pred in IHnormalized1.
+      contradict IHnormalized1.
+      eexists.
+      econstructor;eauto.
+    - unfold normalized_pred in IHnormalized2.
+      contradict IHnormalized2.
+      eexists.
+      econstructor;eauto.
+    - unfold normalized_pred in IHnormalized3.
+      contradict IHnormalized3.
+      eexists.
+      econstructor;eauto.
+    - unfold normalized_pred in IHnormalized4.
+      contradict IHnormalized4.
+      eexists.
+      econstructor;eauto.
+  }
+  {
+    destruct K; simpl in *;inversion H2;subst.
+    - inversion H4;subst.
+      contradict H1.
+      do 5 eexists;eauto.
+    - unfold normalized_pred in IHnormalized1.
+      contradict IHnormalized1.
+      eexists.
+      econstructor;eauto.
+    - unfold normalized_pred in IHnormalized2.
+      contradict IHnormalized2.
+      eexists.
+      econstructor;eauto.
+  }
+Qed.
 
 
 
