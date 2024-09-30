@@ -245,149 +245,6 @@ Qed.
 Definition Bool := App Idx (LitNat 2).
 Definition ETrue := LitIdx 2 (Fin.FS Fin.F1).
 
-(* TODO: require normalized subexpressions? (would be needed for in-to-out-order) *)
-Inductive normalize_step : expr -> expr -> Prop :=
-  (* no let *)
-  (* | normalize_extract_one e:
-    (* TODO: need normalized of e? *)
-    normalize_step (Extract e (LitIdx 1 Fin.F1)) e
-  | normalize_tuple_one e:
-    normalize_step (Tuple [e]) e
-  | normalize_sigma_one x T:
-    normalize_step (Sigma [(x,T)]) T
-    (* normalize_step (Sigma [xT]) (Sigma [xT]) *)
-  | normalize_tuple_beta xs n i e:
-    length xs = n ->
-    nth_error xs (` (Fin.to_nat i)) = Some e ->
-    (* TODO: maybe we could model this using vectors *)
-    normalize_step (Extract (Tuple xs) (LitIdx n i)) e
-  | normalize_pack_beta en e ei:
-    normalize_step (Extract (Pack BAnon en e) ei) e
-  | normalize_tuple_eta e n:
-    (* TODO: n>1 missing from paper *)
-    n > 1 ->
-    normalize_step (Tuple (map (fun i => Extract e (LitIdx n i)) (ltac: (destruct (fin_list n) as [xs _];exact xs)))) e
-  | normalize_pack_tuple n e:
-    (* replicate is the same as repeat *)
-    n > 1 ->
-    normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
-  | normalize_array_sigma n T:
-    n > 1 ->
-    normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T) *)
-  | normalize_beta x T ef U eb ea:
-    (* TODO: ef[ea/x] beta equiv true *)
-    ef = ETrue ->
-    normalize_step (App (Lam x T ef U eb) ea) (subst' x ea eb)
-  (* | normalize_tuple_pack x n e:
-    normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
-  | normalize_sigma_array x n T:
-    normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T)))
-
-  (* TODO: not in paper *)
-  | normalize_pack_one e:
-    normalize_step (Pack BAnon (LitNat 1) e) e
-  | normalize_array_one T:
-    normalize_step (Array BAnon (LitNat 1) T) T *)
-.
-
-(* TODO: do we need to require left-to-right or in-to-out order? *)
-Inductive full_ectx :=
-  | FHoleCtx
-  | FPi1 (x:binder) (K: full_ectx) (U:expr)
-  | FPi2 (x:binder) (K: expr) (U:full_ectx)
-  | FLam1 (x:binder) (T: full_ectx) (f:expr) (U:expr) (e:expr)
-  | FLam2 (x:binder) (T: expr) (f:full_ectx) (U:expr) (e:expr)
-  | FLam3 (x:binder) (T: expr) (f:expr) (U:full_ectx) (e:expr)
-  | FLam4 (x:binder) (T: expr) (f:expr) (U:expr) (e:full_ectx)
-  | FApp1 (K: full_ectx) (e2 : expr)
-  | FApp2 (e1 : expr) (K: full_ectx)
-  (* | FSigma (xs1: list (binder * expr)) (x:binder) (K: full_ectx) (xs2: list (binder * expr))
-  | FTuple (es1:list expr) (K: full_ectx) (es2: list expr)
-  | FArray1 (x:binder) (en: full_ectx) (T:expr)
-  | FArray2 (x:binder) (en: expr) (T: full_ectx)
-  | FPack1 (x:binder) (en: full_ectx) (e:expr)
-  | FPack2 (x:binder) (en: expr) (e: full_ectx)
-  | FExtract1 (K: full_ectx) (ei:expr)
-  | FExtract2 (e:expr) (K: full_ectx) *)
-  .
-
-Fixpoint full_fill (K:full_ectx) (e:expr) : expr :=
-  match K with
-  | FHoleCtx => e
-  | FPi1 x K U => Pi x (full_fill K e) U
-  | FPi2 x T K => Pi x T (full_fill K e)
-  | FLam1 x K f U eb => Lam x (full_fill K e) f U eb
-  | FLam2 x T K U eb => Lam x T (full_fill K e) U eb
-  | FLam3 x T f K eb => Lam x T f (full_fill K e) eb
-  | FLam4 x T f U K  => Lam x T f U (full_fill K e)
-  | FApp1 K e2 => App (full_fill K e) e2
-  | FApp2 e1 K => App e1 (full_fill K e)
-  (* | FSigma xs1 x K xs2 => Sigma (xs1 ++ (x,full_fill K e) :: xs2)
-  | FTuple es1 K es2 => Tuple (es1 ++ full_fill K e :: es2)
-  | FArray1 x K T => Array x (full_fill K e) T
-  | FArray2 x en K => Array x en (full_fill K e)
-  | FPack1 x K eb => Pack x (full_fill K e) eb
-  | FPack2 x en K => Pack x en (full_fill K e)
-  | FExtract1 K ei => Extract (full_fill K e) ei
-  | FExtract2 eb K => Extract eb (full_fill K e) *)
-  end.
-
-
-(* Definition normalizable (e : expr) :=
-  ∃ e', full_contextual_step e e'. *)
-
-(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
-  Fectx_step K (e1_lam' e1_arg':expr) e2' :
-  (* maybe normalized e1' and e2' already *)
-    e1 = full_fill K (App e1_lam' e1_arg') → 
-    e2 = full_fill K e2' →
-    normalize_step (App e1_lam' e1_arg') e2' → 
-    full_contextual_step e1 e2
-with normalized_pred (e : expr) :=
-  | norm_pred : ~ (∃ e', full_contextual_step e e') -> normalized_pred e. *)
-
-
-(* Fixpoint full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
-  exists K e1' e2',
-    normalized e1' ∧
-    e1 = full_fill K e1' ∧ e2 = full_fill K e2' ∧ normalize_step e1' e2'
-with normalized_pred (e:expr) := ~ exists e', full_contextual_step e e'. *)
-
-
-Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
-  Fectx_step K e1' e2' :
-  (* maybe normalized e1' and e2' already *)
-    e1 = full_fill K e1' → e2 = full_fill K e2' →
-    (* normalized_pred (full_contextual_step) e1' →  *)
-    normalize_step e1' e2' → full_contextual_step e1 e2.
-
-(* Definition normalized_pred (step:expr -> expr -> Prop) (e : expr) :=
-  ~ ∃ e', step e e'. *)
-
-
-(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
-  Fectx_step K e1' e2' :
-  (* maybe normalized e1' and e2' already *)
-    e1 = full_fill K e1' → e2 = full_fill K e2' →
-    normalize_step e1' e2' → full_contextual_step e1 e2.
-
-Definition normalized_pred (e : expr) :=
-  ~ ∃ e', full_contextual_step e e'. *)
-Definition normalized_pred (e : expr) :=
-  ~ ∃ e', full_contextual_step e e'.
-
-  (* maybe as inductive? *)
-  (* perform all possible normalization redexes *)
-Definition normal_eval e e' :=
-  rtc full_contextual_step e e' ∧ normalized_pred e'.
-
-(*
-  a bit more constructive version
-  => subexpressions and contradict normalization step in negative assumptions
-
-
-  TODO: change
-*)
 Inductive normalized : expr -> Prop :=
   (* atomic values *)
   (* conceptually, every value is normalized (not quite -- normalization goes under binders) *)
@@ -480,6 +337,172 @@ Inductive normalized : expr -> Prop :=
     ~ (exists en eb, e = Pack BAnon en eb) ->
     normalized (Extract e ei) *)
   .
+
+
+(* TODO: require normalized subexpressions? (would be needed for in-to-out-order) *)
+Inductive normalize_step : expr -> expr -> Prop :=
+  (* no let *)
+  (* | normalize_extract_one e:
+    (* TODO: need normalized of e? *)
+    normalize_step (Extract e (LitIdx 1 Fin.F1)) e
+  | normalize_tuple_one e:
+    normalize_step (Tuple [e]) e
+  | normalize_sigma_one x T:
+    normalize_step (Sigma [(x,T)]) T
+    (* normalize_step (Sigma [xT]) (Sigma [xT]) *)
+  | normalize_tuple_beta xs n i e:
+    length xs = n ->
+    nth_error xs (` (Fin.to_nat i)) = Some e ->
+    (* TODO: maybe we could model this using vectors *)
+    normalize_step (Extract (Tuple xs) (LitIdx n i)) e
+  | normalize_pack_beta en e ei:
+    normalize_step (Extract (Pack BAnon en e) ei) e
+  | normalize_tuple_eta e n:
+    (* TODO: n>1 missing from paper *)
+    n > 1 ->
+    normalize_step (Tuple (map (fun i => Extract e (LitIdx n i)) (ltac: (destruct (fin_list n) as [xs _];exact xs)))) e
+  | normalize_pack_tuple n e:
+    (* replicate is the same as repeat *)
+    n > 1 ->
+    normalize_step (Tuple (replicate n e)) (Pack (BAnon) (LitNat n) e)
+  | normalize_array_sigma n T:
+    n > 1 ->
+    normalize_step (Sigma (replicate n (BAnon, T))) (Array (BAnon) (LitNat n) T) *)
+  | normalize_beta x T ef U eb ea:
+    (* TODO: ef[ea/x] beta equiv true *)
+    ef = ETrue ->
+    normalized T ->
+    normalized U ->
+    normalized ef ->
+    normalized eb ->
+    normalized ea ->
+    normalize_step (App (Lam x T ef U eb) ea) (subst' x ea eb)
+  (* | normalize_tuple_pack x n e:
+    normalize_step (Pack (BNamed x) (LitNat n) e) (Tuple (instantiate x n e))
+  | normalize_sigma_array x n T:
+    normalize_step (Array (BNamed x) (LitNat n) T) (Sigma (map (fun x => (BAnon, x)) (instantiate x n T)))
+
+  (* TODO: not in paper *)
+  | normalize_pack_one e:
+    normalize_step (Pack BAnon (LitNat 1) e) e
+  | normalize_array_one T:
+    normalize_step (Array BAnon (LitNat 1) T) T *)
+.
+
+(* TODO: do we need to require left-to-right or in-to-out order? *)
+Inductive full_ectx :=
+  | FHoleCtx
+  | FPi1 (x:binder) (K: full_ectx) (U:expr)
+  | FPi2 (x:binder) (K: expr) (U:full_ectx)
+  | FLam1 (x:binder) (T: full_ectx) (f:expr) (U:expr) (e:expr)
+  | FLam2 (x:binder) (T: expr) (f:full_ectx) (U:expr) (e:expr)
+  | FLam3 (x:binder) (T: expr) (f:expr) (U:full_ectx) (e:expr)
+  | FLam4 (x:binder) (T: expr) (f:expr) (U:expr) (e:full_ectx)
+  | FApp1 (K: full_ectx) (e2 : expr)
+  | FApp2 (e1 : expr) (K: full_ectx)
+  (* | FSigma (xs1: list (binder * expr)) (x:binder) (K: full_ectx) (xs2: list (binder * expr))
+  | FTuple (es1:list expr) (K: full_ectx) (es2: list expr)
+  | FArray1 (x:binder) (en: full_ectx) (T:expr)
+  | FArray2 (x:binder) (en: expr) (T: full_ectx)
+  | FPack1 (x:binder) (en: full_ectx) (e:expr)
+  | FPack2 (x:binder) (en: expr) (e: full_ectx)
+  | FExtract1 (K: full_ectx) (ei:expr)
+  | FExtract2 (e:expr) (K: full_ectx) *)
+  .
+
+Fixpoint full_fill (K:full_ectx) (e:expr) : expr :=
+  match K with
+  | FHoleCtx => e
+  | FPi1 x K U => Pi x (full_fill K e) U
+  | FPi2 x T K => Pi x T (full_fill K e)
+  | FLam1 x K f U eb => Lam x (full_fill K e) f U eb
+  | FLam2 x T K U eb => Lam x T (full_fill K e) U eb
+  | FLam3 x T f K eb => Lam x T f (full_fill K e) eb
+  | FLam4 x T f U K  => Lam x T f U (full_fill K e)
+  | FApp1 K e2 => App (full_fill K e) e2
+  | FApp2 e1 K => App e1 (full_fill K e)
+  (* | FSigma xs1 x K xs2 => Sigma (xs1 ++ (x,full_fill K e) :: xs2)
+  | FTuple es1 K es2 => Tuple (es1 ++ full_fill K e :: es2)
+  | FArray1 x K T => Array x (full_fill K e) T
+  | FArray2 x en K => Array x en (full_fill K e)
+  | FPack1 x K eb => Pack x (full_fill K e) eb
+  | FPack2 x en K => Pack x en (full_fill K e)
+  | FExtract1 K ei => Extract (full_fill K e) ei
+  | FExtract2 eb K => Extract eb (full_fill K e) *)
+  end.
+
+Fixpoint comp_full_ectx (K1 K2: full_ectx) :=
+  match K1 with 
+  | FHoleCtx => K2
+  | FPi1 x K U => FPi1 x (comp_full_ectx K K2) U
+  | FPi2 x T K => FPi2 x T (comp_full_ectx K K2)
+  | FLam1 x K f U eb => FLam1 x (comp_full_ectx K K2) f U eb
+  | FLam2 x T K U eb => FLam2 x T (comp_full_ectx K K2) U eb
+  | FLam3 x T f K eb => FLam3 x T f (comp_full_ectx K K2) eb
+  | FLam4 x T f U K  => FLam4 x T f U (comp_full_ectx K K2)
+  | FApp1 K e2 => FApp1 (comp_full_ectx K K2) e2
+  | FApp2 e1 K => FApp2 e1 (comp_full_ectx K K2)
+  end.
+
+Lemma full_fill_comp K1 K2 e:
+  full_fill (comp_full_ectx K1 K2) e = full_fill K1 (full_fill K2 e).
+Proof. induction K1; simpl; congruence. Qed.
+
+(* Definition normalizable (e : expr) :=
+  ∃ e', full_contextual_step e e'. *)
+
+(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K (e1_lam' e1_arg':expr) e2' :
+  (* maybe normalized e1' and e2' already *)
+    e1 = full_fill K (App e1_lam' e1_arg') → 
+    e2 = full_fill K e2' →
+    normalize_step (App e1_lam' e1_arg') e2' → 
+    full_contextual_step e1 e2
+with normalized_pred (e : expr) :=
+  | norm_pred : ~ (∃ e', full_contextual_step e e') -> normalized_pred e. *)
+
+
+(* Fixpoint full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  exists K e1' e2',
+    normalized e1' ∧
+    e1 = full_fill K e1' ∧ e2 = full_fill K e2' ∧ normalize_step e1' e2'
+with normalized_pred (e:expr) := ~ exists e', full_contextual_step e e'. *)
+
+
+Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K e1' e2' :
+  (* maybe normalized e1' and e2' already *)
+    e1 = full_fill K e1' → e2 = full_fill K e2' →
+    (* normalized_pred (full_contextual_step) e1' →  *)
+    normalize_step e1' e2' → full_contextual_step e1 e2.
+
+(* Definition normalized_pred (step:expr -> expr -> Prop) (e : expr) :=
+  ~ ∃ e', step e e'. *)
+
+
+(* Inductive full_contextual_step (e1 : expr) (e2 : expr) : Prop :=
+  Fectx_step K e1' e2' :
+  (* maybe normalized e1' and e2' already *)
+    e1 = full_fill K e1' → e2 = full_fill K e2' →
+    normalize_step e1' e2' → full_contextual_step e1 e2.
+
+Definition normalized_pred (e : expr) :=
+  ~ ∃ e', full_contextual_step e e'. *)
+Definition normalized_pred (e : expr) :=
+  ~ ∃ e', full_contextual_step e e'.
+
+  (* maybe as inductive? *)
+  (* perform all possible normalization redexes *)
+Definition normal_eval e e' :=
+  rtc full_contextual_step e e' ∧ normalized_pred e'.
+
+(*
+  a bit more constructive version
+  => subexpressions and contradict normalization step in negative assumptions
+
+
+  TODO: change
+*)
 (* TODO:
   enumerate full constructive (as far as possible) normalized predicate
   TODO: not up to date
@@ -614,6 +637,62 @@ Proof.
   }
 Qed.
 
+
+
+(* Lemma norm_total e:
+  exists e', e →ₙ e'. *)
+
+
+Lemma norm_sound2 e: 
+    normalized_pred e -> normalized e.
+Proof.
+  induction e;intros H.
+  1-7: constructor.
+  - enough (normalized_pred e1 /\ normalized_pred e2).
+    { constructor;[apply IHe1|apply IHe2];now destruct H0. }
+    unfold normalized_pred in *. split.
+    + contradict H;destruct H as [? []];subst.
+      eexists. econstructor;eauto.
+      instantiate (1:=FPi1 x K e2).
+      reflexivity.
+    + contradict H;destruct H as [? []];subst.
+      eexists. econstructor;eauto.
+      instantiate (1:=FPi2 x e1 K).
+      reflexivity.
+  - constructor;[apply IHe1|apply IHe2|apply IHe3|apply IHe4].
+    all: unfold normalized_pred in *;intros [e' []];apply H;subst.
+    all: eexists;econstructor;eauto.
+    + now instantiate (1:=FLam1 x K e2 e3 e4).
+    + now instantiate (1:=FLam2 x e1 K e3 e4).
+    + now instantiate (1:=FLam3 x e1 e2 K e4).
+    + now instantiate (1:=FLam4 x e1 e2 e3 K).
+  - assert(normalized_pred e1 /\ normalized_pred e2) as [? ?].
+    {
+      split.
+      all: unfold normalized_pred in *;intros [e' []];apply H;subst.
+      all: eexists;econstructor;eauto.
+      + now instantiate (1:=FApp1 K e2).
+      + now instantiate (1:=FApp2 e1 K).
+    }
+    constructor;[apply IHe1|apply IHe2|];try eassumption.
+    {
+      apply IHe1 in H0.
+      apply IHe2 in H1.
+      unfold normalized_pred in H.
+      contradict H.
+      destruct H as (?&?&?&?&?&[]);subst.
+      inversion H0;subst.
+      eexists.
+      econstructor;eauto.
+      2: econstructor.
+      2: reflexivity.
+      1: {
+        instantiate (6:=FHoleCtx).
+        simpl. reflexivity.
+      }
+      all: try eassumption.
+    }
+Qed.
 
 
 (* Lemma normalized_sound e:
@@ -1358,10 +1437,72 @@ because
 normalized_pred := ~ exists full_contextual_step
 *)
 
+(*
+full_contextual_step is defined over contexts
+we extend it to rtc
+*)
+Lemma rtc_full_contextual_context e e' e1 e1' K:
+  rtc full_contextual_step e1 e1' →
+  e = full_fill K e1 →
+  e' = full_fill K e1' →
+  rtc full_contextual_step e e'.
+Proof.
+  induction 1 in e,e' |- *;intros Hfill Hfill2.
+  - subst. constructor.
+  - subst. 
+    destruct H;subst.
+    econstructor.
+    + eapply Fectx_step with (K:= comp_full_ectx K K0);eauto.
+      now rewrite full_fill_comp.
+    + rewrite full_fill_comp.
+      now apply IHrtc.
+(* Restart.
+  intros;subst.
+  eapply rtc_congruence.
+  - intros. *)
+Qed.
+
+Lemma rtc_rtc {A:Type} {R:relation A} e e' e'':
+  rtc R e e' →
+  rtc R e' e'' →
+  rtc R e e''.
+Proof.
+  induction 1;auto.
+  intros Hrtc.
+  econstructor;[|apply IHrtc];eauto.
+Qed.
+
+
+(* Lemma normalized_dec e:
+  normalized e ∨ ¬ normalized e.
+Proof. *)
+
 
 Lemma normal_functional e:
   {e' | normal_eval e e'}.
 Proof.
+  induction e.  
+  1-7: eexists;subst;constructor;[constructor|];apply norm_sound;constructor.
+  - destruct IHe1 as [e1' [He1' Hnorme1']].
+    destruct IHe2 as [e2' [He2' Hnorme2']].
+    exists (Pi x e1' e2').
+    constructor.
+    + eapply rtc_rtc.
+      * eapply rtc_full_contextual_context.
+        -- apply He1'.
+        -- instantiate (1:=(FPi1 x FHoleCtx e2));simpl;reflexivity.
+        -- simpl. reflexivity.
+      * eapply rtc_full_contextual_context.
+        -- apply He2'.
+        -- instantiate (1:=(FPi2 x e1' FHoleCtx));simpl;reflexivity.
+        -- simpl. reflexivity.
+    + apply norm_sound.
+      constructor;auto.
+      all: now apply norm_sound2.
+  - admit. (* same as above *)
+  - destruct IHe1 as [e1' [He1' Hnorme1']].
+    destruct IHe2 as [e2' [He2' Hnorme2']].
+    admit. (* TODO: we have the additional step *)
 Admitted.
 
 

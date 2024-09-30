@@ -690,10 +690,10 @@ Proof.
       destruct K;simpl in *;inversion H1;subst;eauto.
     }
     + simpl in *;subst.
-      (* TODO:
+      (* 
       these are e1 ->n e1' and e2 ->n e2'
       do these need to be full to end normalizations? (probably?)
-      => TODO: need to restrict full_contextual_steps to have normalized subexpression
+      => need to restrict full_contextual_steps to have normalized subexpression
        *)
       exists e1, e2.
       assert(
@@ -701,6 +701,9 @@ Proof.
       ) as [Hn1 Hn2].
       {
         inversion H4;subst.
+        split.
+        - apply norm_sound. constructor;eassumption.
+        - apply norm_sound. eassumption.
       }
       split;[|split].
       3: {
@@ -737,7 +740,34 @@ Proof.
         right.
         exists f'. 
         split;eauto.
-Admitted.
+    + subst;simpl in *.
+      inversion H1;subst;clear H1.
+      (* same as case above (go into right side instead of left) *)
+      specialize (IHrtc e1 (full_fill K' e2')).
+      edestruct IHrtc as [f1 [f2 [Hf1 [Hf2 [-> | [f' [Hstep Hnorm]]]]]]];eauto.
+      1: constructor;eauto.
+      * exists f1, f2. 
+        split;[|split].
+        1,3: eauto.
+        destruct Hf2.
+        constructor;eauto.
+        econstructor.
+        2: eassumption.
+        econstructor;eauto.
+      * exists f1, f2.
+        split;[|split].
+        1: assumption.
+        1: {
+          destruct Hf2.
+          constructor;eauto.
+          econstructor.
+          2: eauto.
+          econstructor;eauto.
+        }
+        right.
+        exists f'. 
+        split;eauto.
+Qed.
 
 
 
