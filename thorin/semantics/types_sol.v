@@ -24,6 +24,11 @@ Constructions" by Brandl
   The most important difference to CC is that we have no rule that types can be beta equivalent for typing.
   Although we add such a rule for preservation (see below).
   Our normalization operations are applied eagerly at every construction and can be assumed as precondition for every expression.
+
+  General idea:
+  The proof is identical to normal CC progress and preservation proofs.
+  Only normalization is added in between steps.
+  In the inspected setting, normalization is a subset of beta steps.
 *)
 
 Definition typing_context := gmap string expr.
@@ -966,12 +971,154 @@ Proof.
     eapply IHbeta_syn_typed;eauto.
 Admitted.
 
+(* Definition gamma_step Γ Γ' :=
+  exists Γ0 x v v',
+    Γ = insert_name x v Γ0 /\ 
+    Γ' = insert_name x v' Γ0 /\
+    v →ᵦₙ v'. *)
+
+Definition gamma_step Γ Γ' :=
+  exists x v v',
+    Γ !! x = Some v /\
+    Γ' !! x = Some v' /\
+    (forall y, y ≠ x -> Γ !! y = Γ' !! y) /\
+    v →ᵦₙ v'.
+
+Lemma extend_gamma_step x v Γ Γ':
+  gamma_step Γ Γ' ->
+  gamma_step (insert_name x v Γ) (insert_name x v Γ').
+Proof.
+  intros H.
+  destruct x;simpl;eauto.
+  destruct H as [y [v0 [v1 [HΓ [HΓ' [HOther Hstep]]]]]].
+  destruct (decide (s = y)).
+  - admit. (* avoid name clash *)
+  - eexists y, v0, v1.
+    repeat split;eauto.
+    1,2: rewrite lookup_insert_ne;eauto.
+    intros z Hneq.
+    destruct (decide (z = s));subst.
+    + do 2 rewrite lookup_insert;eauto.
+    + do 2 (rewrite lookup_insert_ne;eauto).
+Admitted.
+
+Lemma insert_gamma_step x v v' Γ:
+  v →ᵦₙ v' ->
+  gamma_step (<[x:=v]>Γ) (<[x:=v']>Γ).
+Proof.
+  intros.
+  eexists x, v, v'.
+  repeat rewrite lookup_insert.
+  repeat split;eauto.
+  intros.
+  rewrite lookup_insert_ne;eauto.
+  rewrite lookup_insert_ne;eauto.
+Qed.
+
+Lemma insert_name_gamma_step x v v' Γ:
+  v →ᵦₙ v' ->
+  gamma_step (insert_name x v Γ) (insert_name x v' Γ).
+Admitted.
+
+Lemma step_equiv e e':
+  e →ᵦₙ e' ->
+  e ≡ᵦ e'.
+Admitted.
+
+Lemma equiv_symmetry e1 e2:
+  e1 ≡ᵦ e2 ->
+  e2 ≡ᵦ e1.
+Proof.
+  intros (e'&H1&H2).
+  exists e';now split.
+Qed.
+
+
+(* TODO: 2 *)
+Lemma step_beta_preservation Γ e A:
+  TY Γ ⊢ᵦ e : A ->
+  (forall e', e →ᵦₙ e' ->
+  TY Γ ⊢ᵦ e' : A) /\
+  (forall Γ', gamma_step Γ Γ' ->
+  TY Γ' ⊢ᵦ e : A)
+  .
+Proof.
+  intros HTy.
+  dependent induction HTy;(split;
+    [
+      intros e' [e'' [[K e1 e2 ? ? Hstep] Hnorm]];subst|
+      intros Γ' Hstep
+      (* intros Γ' (a&v&v'&HΓ&HΓ'&HOther&Hstep) *)
+    ]).
+  all: try now (destruct K;cbn in *;inversion Hstep;subst).
+  all: try now constructor.
+  2,4,6,8: shelve.
+  - destruct Hstep as (y&v&v'&HΓ&HΓ'&HOther&Hstep).
+    destruct (decide (x = y));subst.
+    + rewrite H in HΓ. inversion HΓ;subst.
+      eapply beta_typed_conv.
+      * econstructor; eassumption.
+      * now apply equiv_symmetry,step_equiv.
+    + constructor.
+      rewrite <- H. symmetry.
+      now apply HOther.
+  - constructor.
+    + apply IHHTy1;assumption.
+    + apply IHHTy2. 
+      apply extend_gamma_step. assumption.
+  - econstructor;eauto.
+    + now apply IHHTy1.
+    + apply IHHTy2. now apply extend_gamma_step.
+    + apply IHHTy3. now apply extend_gamma_step.
+    + apply IHHTy4. now apply extend_gamma_step.
+  - econstructor;eauto.
+    + now apply IHHTy1.
+    + now apply IHHTy2. 
+  - econstructor;eauto.
+    now apply IHHTy.
+
+  Unshelve.
+  {
+    (* Pi *)
+    destruct K;cbn in *;inversion H;subst.
+    + inversion Hstep.
+    + (* step in Type *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Pi x0 Ke2' U0
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_pi.
+      * eapply IHHTy1;eauto. admit.
+      * (* step in context *)
+        apply IHHTy2.
+        apply insert_name_gamma_step.
+        admit.
+    + (* step in codom *)
+      assert (
+        exists Ke2',
+        fill K e2 →ₙ Ke2' /\
+        e' = Pi x0 T0 Ke2'
+      ) as [Ke2' [HKe2norm ->]] by admit.
+      eapply beta_typed_pi.
+      * eassumption.
+      * eapply IHHTy2;eauto.
+        admit.
+Admitted.
+
+
+Lemma beta_preservation Γ e A e':
+  TY Γ ⊢ᵦ e : A ->
+  e →ᵦₙ e' ->
+  TY Γ ⊢ᵦ e' : A.
+Proof.
+  intros [H ?]%step_beta_preservation.
+  now apply H.
+Qed.
 
 
 
-
-
-Lemma beta_preservation Γ e e' A:
+Lemma beta_preservation' Γ e A e':
   TY Γ ⊢ᵦ e : A ->
   e →ᵦₙ e' ->
   TY Γ ⊢ᵦ e' : A.
@@ -1139,82 +1286,4 @@ Proof.
     }
     assumption.
 Admitted.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
