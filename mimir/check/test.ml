@@ -23,6 +23,7 @@ type expr =
   | Array of binder * expr * expr
   | Pack of binder * expr * expr
   | Extract of expr * expr
+(* [@@deriving qcheck] *)
 
 let rec subst x es e =
   let recurse_under y expr =
@@ -778,10 +779,13 @@ and random_type depth =
     | _ -> failwith "impossible"
 
 
+let _ = print_endline "Checking random expressions for normalization"
+let _ = print_endline ""
 (*
    generate 1000000 random expressions and filter out those that are typed
 *)
-let expressions_rand_5 = List.init 1000000 (fun _ -> random_expression 3)
+let expressions_rand count depth = List.init count (fun _ -> random_expression depth)
+(* let expressions_rand_5 = List.init 1000000 (fun _ -> random_expression 3) *)
 (* let expressions_rand_5 = List.init 1000000 (fun _ -> random_expression 5) *)
 (* let expressions_rand_5 = List.init 10000 (fun _ -> random_expression 10) *)
   |> List.sort_uniq compare
@@ -792,7 +796,7 @@ let expressions_rand_5 = List.init 1000000 (fun _ -> random_expression 3)
   print_endline "" *)
 
 let errors = 
-    expressions_rand_5 
+    expressions_rand 10000 3
     |> List.filter(fun e ->
       let e' = full_normalize e in
       let _A = Option.get (type_of [] e) in
@@ -893,3 +897,141 @@ let expressions_d2 = List.filter (fun e -> type_of [] e <> None) expressions_d2
 let _ =
   List.iter (fun e -> print_endline (pretty_string_of_expr e)) expressions_d2;
   print_endline "" *)
+
+
+let beta_step e = 
+  match e with
+  | App (Lam (x, t, f, u, elam), earg) -> 
+    (* superfluous *)
+    if t <> full_normalize t then None else
+    (* we do not require earg value, as we perform arbitrary redexes in arbitrary order *)
+    (* norm superfluous as we will norm afterward *)
+    Some (subst' x earg elam)
+  (* Iota rules (extracts) *)
+  | Extract (Tuple es,LitIdx (n, i)) -> 
+    (* again, we do not care about value here *)
+    (* ensured by typing *)
+    if i < n && List.length es = n then Some (List.nth es i) else None
+  | Extract (Pack (x, en, e), ei) -> 
+    (* again, we do not care about value here *)
+    Some (subst' x ei e)
+  | _ -> None
+
+
+let context_step f e =
+  match f e with
+  | Some e' -> Some e'
+  | None ->
+    match e with 
+    | App (e1, e2) -> 
+      (match f e1 with
+      | Some e1' -> Some (App (e1', e2))
+      | None -> 
+        (match f e2 with
+        | Some e2' -> Some (App (e1, e2'))
+        | None -> None))
+    (* for lam, we only go in the body; but we go there => under binder *)
+    | Lam (x, t, ef, u, e) -> 
+      (match f e with
+      | Some e' -> Some (Lam (x, t, ef, u, e'))
+      | None -> None)
+    | Tuple es ->
+      let rec fold_step es =
+        match es with
+        | [] -> None
+        | e :: es' ->
+          (match f e with
+          | Some e' -> Some ((e' :: es'))
+          | None -> 
+            (match fold_step es' with
+            | Some es'' -> Some ((e :: es''))
+            | None -> None))
+      in
+      fold_step es |> Option.map (fun es -> Tuple es)
+    (* eval in en and e *)
+    | Pack (x, en, e) ->
+      (match f en with
+      | Some en' -> Some (Pack (x, en', e))
+      | None -> 
+        (match f e with
+        | Some e' -> Some (Pack (x, en, e'))
+        | None -> None))
+    | Extract (e, ei) ->
+      (match f e with
+      | Some e' -> Some (Extract (e', ei))
+      | None -> 
+        (match f ei with
+        | Some ei' -> Some (Extract (e, ei'))
+        | None -> None))
+      (* Pi go right *)
+    | Pi (x, t, u) ->
+      (match f u with
+      | Some u' -> Some (Pi (x, t, u'))
+      | None -> None)
+    | Array (x, en, t) ->
+      (match f en with
+      | Some en' -> Some (Array (x, en', t))
+      | None -> 
+        (match f t with
+        | Some t' -> Some (Array (x, en, t'))
+        | None -> None))
+      (* do not go under named types => no sigma *)
+    | _ -> None
+
+let beta_inner = context_step beta_step
+
+(*
+  Preservation:
+  norm e : T 
+  and norm e = Some e'
+  then norm e' has type norm T
+*)
+let _ = print_endline "Checking preservation"
+let _ = print_endline ""
+let preservation_errors =
+    expressions_rand 100000 3
+    |> List.filter(fun e_org ->
+      let e = full_normalize e_org in
+      let _T = Option.get (type_of [] e) in
+      (* let e' = beta_step e in *)
+      let e' = beta_inner e in
+      match e' with
+      | Some e' -> 
+        let e'_norm = full_normalize e' in
+        let _T' = Option.get (type_of [] e'_norm) in
+        if _T <> _T' then
+          (Printf.printf "e   : %s\n" (pretty_string_of_expr e);
+          Printf.printf "T   : %s\n" (pretty_string_of_expr _T);
+          Printf.printf "e'  : %s\n" (pretty_string_of_expr e'_norm);
+          Printf.printf "T'  : %s\n" (pretty_string_of_expr _T');
+          print_endline "";
+          true)
+        else false
+      | None -> false (* ignore expressions that don't step *)
+    )
+
+
+
+
+
+(* let _ = 
+  let e = App (Lam (BNamed "x", Nat, efalse, Nat, Var "x"), LitNat 42) in
+  let e' = beta_step e in
+  print_endline (pretty_string_of_expr e);
+  print_endline (pretty_string_of_expr (Option.get e'));
+  print_endline "" *)
+
+;;
+#require "qcheck";;
+  (*
+     quick check tests
+     https://github.com/c-cube/qcheck
+     https://github.com/c-cube/qcheck/tree/main/src/ppx_deriving_qcheck
+  *)
+
+(* 
+let test =
+  QCheck.Test.make
+    ~name:"expr dummy"
+	(QCheck.make gen_expr)
+	(fun expr -> expr = expr) *)
