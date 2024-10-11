@@ -604,6 +604,10 @@ Proof.
 Qed.
 
 
+(*
+prepend normal steps do not change the normalization
+after all, all our expressions are normalized
+*)
 Lemma norm_beta_preserve A B A' B':
   A ≡ᵦ B ->
   A →ₙ A' ->
@@ -612,7 +616,10 @@ Lemma norm_beta_preserve A B A' B':
 Proof.
 Admitted.
 
-
+(*
+simple except app -> normalize again after beta step
+=> user has to guarantee finite normalization chains
+*)
 Lemma normal_functional e:
   {e' | normal_eval e e'}.
 Proof.
@@ -662,19 +669,6 @@ Proof.
       1: eapply rtc_full_contextual_context with (K:=FApp2 e1' FHoleCtx);[apply He2'| |];simpl;reflexivity.
       constructor.
     }
-    (* assert(
-      (* (exists x T ef U eb, e1' = Lam x T ef U eb) \/ *)
-      {x & {T & {ef & {U & {eb & e1' = Lam x T ef U eb}}}}} +
-      (forall x T ef U eb, e1' ≠ Lam x T ef U eb)
-      (* ~is_lam *)
-    ) as [(?&?&?&?&?&->)|?].
-    {
-      admit.
-    }
-    Print full_contextual_step.
-    Print normalize_step. *)
-    admit. (* TODO: we have the additional step *)
-    (* TODO: 2 *)
 Admitted.
 
 
@@ -689,7 +683,6 @@ Proof.
   rewrite HsubstA.
 Admitted.
 
-(* TODO: 2 *)
 Lemma beta_typed_substitutivity e e' Γ (a: binder) A B 
   Γ' e'_norm B'_norm:
   TY Γ ⊢ᵦ e' : A →
@@ -776,7 +769,7 @@ Proof.
     econstructor.
   - (* Var *)
     (*
-      if not subst => all same => no problem?
+      if not subst => all same => no problem
     *)
     assert (a=BAnon \/ a = BNamed x \/ (exists y, a = BNamed y ∧ y ≠ x)) as [->|[->|[y [-> Hne]]]]. 
     {
@@ -817,10 +810,8 @@ Proof.
       destruct a; simpl.
       - reflexivity.
       - f_equal.
-        admit.
-      (* no overlap => binder is not x *)
+        admit. (* no overlap => binder is not x *)
     }
-    (* destruct decide in Hnorme;[admit|]. *)
     assert(
       exists T' U',
       e'_norm = Pi x T' U' /\
@@ -879,8 +870,8 @@ Proof.
     ) as [T'' [U'' [HB'_norm [HnormT' HnormU']]]] by now apply normalize_pi.
     subst.
     (* confluence of normalize *)
-    assert (T' = T'') as -> by admit.
-    assert (U' = U'') as -> by admit. 
+    assert (T' = T'') as -> by now eapply normalized_unique with (e:=subst' a e' T) in HnormT;[|eauto].
+    assert (U' = U'') as -> by now eapply normalized_unique with (e:=subst' a e' U) in HnormU;[|eauto].
     econstructor.
     + eapply IHbeta_syn_typed1.
       2-5: try eassumption.
@@ -916,29 +907,14 @@ Proof.
     }
     apply app_norm in Hnorme as [e1' [e2' [Hstep1 [Hstep2 [->|[enorm [? ?]]]]]]].
     + eapply beta_typed_app.
-      * eapply IHbeta_syn_typed1;eauto. admit. (* type norm *)
+      * eapply IHbeta_syn_typed1;eauto. admit. (* Pi normalized to Pi *)
       * eapply IHbeta_syn_typed2;eauto. admit. (* type norm *)
-      * admit. (* e2' instead of e' in subst *)
+      * admit. (* e2' instead of e' in subst => normalization distributes subst *)
     + specialize (IHbeta_syn_typed1 _ _ _ He' eq_refl).
-      admit. (* TODO: *)
-    (*
-    assert(
-      exists se' seT',
-      subst' a e' e →ₙ se' /\
-      subst' a e' eT →ₙ seT' /\
-      e'_norm = App se' seT'
-    ) as [se' [seT' [Hse' [HseT' ->]]]] by admit.
-    (* TODO: app could collapse *)
-    eapply beta_typed_app.
-    + eapply IHbeta_syn_typed1;eauto. admit. (* type norm *)
-    + eapply IHbeta_syn_typed2;eauto. admit. (* type norm *)
-    *)
+      specialize (IHbeta_syn_typed2 _ _ _ He' eq_refl).
+      admit. (* normalization of subst *)
   - (* beta case *)
-    (* assert (TY insert_name a A Γ ⊢ᵦ e : B) as Hty by admit.
-    clear H.
-    eapply IHbeta_syn_typed;eauto. *)
     specialize (IHbeta_syn_typed Γ a A He' eq_refl).
-
     (*
     generalize over A0?
     allow for more beta equiv?
@@ -960,22 +936,18 @@ Proof.
     {
       eapply norm_beta_preserve.
       2, 3: eassumption.
+      admit.
       (*
         if A0 equiv B
         then 
         subst a e' A0 equiv subst a e' B
+
+        => beta equiv of subst preservation
       *)
-      admit.
     }
     eapply beta_typed_conv;[|eassumption].
     eapply IHbeta_syn_typed;eauto.
 Admitted.
-
-(* Definition gamma_step Γ Γ' :=
-  exists Γ0 x v v',
-    Γ = insert_name x v Γ0 /\ 
-    Γ' = insert_name x v' Γ0 /\
-    v →ᵦₙ v'. *)
 
 Definition gamma_step Γ Γ' :=
   exists x v v',
@@ -1044,11 +1016,9 @@ Proof.
   now econstructor.
 Qed.
 
-(* Hint Resolve insert_name_gamma_step. beta_fill_step. *)
 #[global]
 Hint Resolve insert_name_gamma_step beta_fill_step : core.
 
-(* TODO: 2 *)
 Lemma step_beta_preservation Γ e A:
   TY Γ ⊢ᵦ e : A ->
   (forall e', e →ᵦₙ e' ->
@@ -1062,7 +1032,6 @@ Proof.
     [
       intros e' [e'' [[K e1 e2 ? ? Hstep] Hnorm]];subst|
       intros Γ' Hstep
-      (* intros Γ' (a&v&v'&HΓ&HΓ'&HOther&Hstep) *)
     ]).
   all: try now (destruct K;cbn in *;inversion Hstep;subst).
   all: try now constructor.
@@ -1100,7 +1069,12 @@ Proof.
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
         e' = Pi x0 Ke2' U0
-      ) as [Ke2' [HKe2norm ->]] by admit.
+      ) as [Ke2' [HKe2norm ->]].
+      {
+        apply normalize_pi in Hnorm as [T' [U' [-> [HT HU]]]].
+        eexists;split;eauto.
+        admit. (* U0 is U' as it is already normalized *)
+      }
       eapply beta_typed_pi.
       * eapply IHHTy1. 
         eapply beta_fill_step;eauto.
@@ -1113,7 +1087,12 @@ Proof.
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
         e' = Pi x0 T0 Ke2'
-      ) as [Ke2' [HKe2norm ->]] by admit.
+      ) as [Ke2' [HKe2norm ->]].
+      {
+        apply normalize_pi in Hnorm as [T' [U' [-> [HT HU]]]].
+        eexists;split;eauto.
+        admit. (* T0 is T' as it is already normalized *)
+      }
       eapply beta_typed_pi.
       * eassumption.
       * eapply IHHTy2;eapply beta_fill_step;eauto.
@@ -1126,7 +1105,12 @@ Proof.
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
         e' = Lam x0 Ke2' f U0 e0
-      ) as [Ke2' [HKe2norm ->]] by admit.
+      ) as [Ke2' [HKe2norm ->]]. 
+      {
+        apply normalize_lam in Hnorm as [T' [U' [f' [e'' [-> [HT [Hf [HU]]]]]]]].
+        eexists;split;eauto.
+        admit. (* e0=e', U0=U' as it is already normalized *)
+      }
       eapply beta_typed_conv.
       eapply beta_typed_lam.
       * eapply IHHTy1;eauto.
@@ -1160,10 +1144,13 @@ Proof.
     destruct K;cbn in *;inversion H0;subst.
     (* case left *)
     2: {
-      (* maybe normalize evaluates redex *)
       assert(exists Ke2',
         fill K e2 →ₙ Ke2'
-      ) as [Ke2' HKe2norm] by admit.
+      ) as [Ke2' HKe2norm].
+      {
+        edestruct normal_functional.
+        eexists; eauto.
+      }
       assert (TY Γ ⊢ᵦ Ke2' v2 : U') as Hty.
       {
         eapply beta_typed_app.
@@ -1173,7 +1160,7 @@ Proof.
       }
       (* if normalization of toplevel redex => done *)
 
-      (* just case distinction on normalization? *)
+      (* just case distinction on normalization *)
       (*
         e1 e2 ->n en
         e1 ->n e1n
@@ -1182,9 +1169,8 @@ Proof.
         en = e1n e2n \/ e1n e2n toplevel normalize to en' and en' ->n en
       *)
 
-
-      (* assert (base_step (App Ke2' v2) e') as Hstep' by admit. *)
-      assert (normalize_step (App Ke2' v2) e') as Hstep' by admit.
+      idtac.
+      assert (normalize_step (App Ke2' v2) e') as Hstep' by admit. (* combination of norm steps *)
       inversion Hstep';subst.
       rename eb into elam.
 
@@ -1201,12 +1187,12 @@ Proof.
 
       inversion Hty;subst.
       2: {
-        admit. (* TODO: subst in elam is typed *)
+        admit. (* subst in elam is typed *)
       }
       eapply H1;eauto.
       + admit. (* subst on normalized values is normalized *)
       + inversion H8;subst.
-        2: { admit. }
+        2: { admit. } (* beta conversion case *)
         assumption.
       + admit. (* gamma relation *)
     }
@@ -1214,8 +1200,8 @@ Proof.
     2: {
       assert(exists Ke2',
         fill K e2 →ₙ Ke2'
-      ) as [Ke2' HKe2norm] by admit.
-      assert (exists Ue2', subst' x Ke2' U →ₙ Ue2') as [Ue2' HUe2norm] by admit.
+      ) as [Ke2' HKe2norm] by (edestruct normal_functional;eauto).
+      assert (exists Ue2', subst' x Ke2' U →ₙ Ue2') as [Ue2' HUe2norm] by (edestruct normal_functional;eauto).
       assert (TY Γ ⊢ᵦ e0 Ke2' : U') as Hty.
       {
         eapply beta_typed_conv with (A:=Ue2').
@@ -1240,16 +1226,13 @@ Proof.
       (* clear H H0 Hstep H1 Hnorm IHHTy1 IHHTy2 HTy2. *)
       inversion HTy1;subst.
       2: {
-        admit.
-        (* type conversion case => *)
+        admit.  (* type conversion case => *)
       }
       assumption.
     }
     specialize (H0 U Γ e').
     eapply H0;eauto.
-    admit. (* 
-      subst does not change expressions
-    *)
+    admit. (* subst does not change expressions *)
   } 
   { (* equiv *)
     eapply beta_typed_conv.
