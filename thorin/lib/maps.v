@@ -1,6 +1,6 @@
 From stdpp Require Import gmap.
 From stdpp Require Export relations orders.
-From thorin.lib Require Export sets.
+From mimir.lib Require Export sets.
 
 (** * Finite maps *)
 (** This file provides lemmas on finite maps (functions with a finite domain) [gmap].

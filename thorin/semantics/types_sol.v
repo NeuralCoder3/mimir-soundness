@@ -1,7 +1,6 @@
 From stdpp Require Import base relations.
 From iris Require Import prelude.
-(* From thorin.lib Require Import maps. *)
-From thorin Require Import lang notation.
+From mimir Require Import lang notation.
 Require Import Coq.Program.Equality.
 Require Import Coq.Program.Wf.
 (* From Autosubst Require Export Autosubst. *)
@@ -215,7 +214,7 @@ Instead, we allow for the usual beta equivalence in types.
 This way, our typing embeds: Every typed expression is also typed in "normal CC"
 Then, a step preserves typing (modulo beta equivalence)
 Hence, we end in a beta-equivalent type
-For thorin's type fragment (e.g. finite termination on type level), the embed back works by normalization/furhter steps.
+For mimir's type fragment (e.g. finite termination on type level), the embed back works by normalization/furhter steps.
 
 *)
 
@@ -1252,4 +1251,3 @@ Proof.
   intros [H ?]%step_beta_preservation.
   now apply H.
 Qed.
-

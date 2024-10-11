@@ -1,4 +1,4 @@
-From thorin Require Export lang.
+From mimir Require Export lang.
 Set Default Proof Using "Type".
 
 Coercion LitNat : nat >-> expr.

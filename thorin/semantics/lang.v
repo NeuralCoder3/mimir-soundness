@@ -1,6 +1,6 @@
 From stdpp Require Export binders strings.
 From iris.prelude Require Import options.
-From thorin.lib Require Export maps.
+From mimir.lib Require Export maps.
 Require Import Coq.Program.Equality.
 
 Declare Scope expr_scope.
