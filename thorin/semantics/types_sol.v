@@ -465,15 +465,17 @@ Proof.
     eexists;eassumption.
 Qed.
 
+  (*
+  we have a unique normal form of expressions
+  => 
+  - if go into one subexpression, we eventuelly go in the other (as we do all redexes)
+  - if doing toplevel step, it does not matter if we normalized the subst-in argument before or after
+  *)
 Lemma normalized_unique e e'1 e'2:
   e →ₙ e'1 →
   e →ₙ e'2 →
   e'1 = e'2.
 Proof.
-  intros H1 H2.
-  destruct H1 as [Hstep1 Hnorm1%norm_sound2].
-  destruct H2 as [Hstep2 Hnorm2%norm_sound2].
-  admit. (* TODO: 2 *)
 Admitted.
 
 
@@ -552,8 +554,9 @@ Proof.
     destruct (decide (s = y)) as [->|Hneq].
     + rewrite lookup_insert in Hk.
       rewrite lookup_insert.
-      (* inversion Hk;subst. *)
-      admit. (* TODO: 2 *)
+      f_equal.
+      inversion Hk;subst.
+      shelve.
     + rewrite lookup_insert_ne in Hk;eauto.
       rewrite lookup_insert_ne;eauto.
 Admitted.
@@ -607,9 +610,6 @@ Lemma norm_beta_preserve A B A' B':
   B →ₙ B' ->
   A' ≡ᵦ B'.
 Proof.
-  (* intros [C [[AC [Hb1 Hn1]] [BC [Hb2 Hn2]]]] H3 H4. *)
-  (* add norm to front *)
-  (* TODO: 2 *)
 Admitted.
 
 
@@ -1033,6 +1033,20 @@ Proof.
   exists e';now split.
 Qed.
 
+Lemma beta_fill_step K e1 e2 e':
+base_step e1 e2 ->
+fill K e2 →ₙ e' ->
+fill K e1 →ᵦₙ e'.
+Proof.
+  intros.
+  econstructor;split.
+  2: eassumption.
+  now econstructor.
+Qed.
+
+(* Hint Resolve insert_name_gamma_step. beta_fill_step. *)
+#[global]
+Hint Resolve insert_name_gamma_step beta_fill_step : core.
 
 (* TODO: 2 *)
 Lemma step_beta_preservation Γ e A:
@@ -1078,8 +1092,7 @@ Proof.
     now apply IHHTy.
 
   Unshelve.
-  {
-    (* Pi *)
+  { (* Pi *)
     destruct K;cbn in *;inversion H;subst.
     + inversion Hstep.
     + (* step in Type *)
@@ -1089,11 +1102,12 @@ Proof.
         e' = Pi x0 Ke2' U0
       ) as [Ke2' [HKe2norm ->]] by admit.
       eapply beta_typed_pi.
-      * eapply IHHTy1;eauto. admit.
+      * eapply IHHTy1. 
+        eapply beta_fill_step;eauto.
       * (* step in context *)
         apply IHHTy2.
         apply insert_name_gamma_step.
-        admit.
+        eapply beta_fill_step;eauto.
     + (* step in codom *)
       assert (
         exists Ke2',
@@ -1102,76 +1116,33 @@ Proof.
       ) as [Ke2' [HKe2norm ->]] by admit.
       eapply beta_typed_pi.
       * eassumption.
-      * eapply IHHTy2;eauto.
-        admit.
-Admitted.
-
-
-Lemma beta_preservation Γ e A e':
-  TY Γ ⊢ᵦ e : A ->
-  e →ᵦₙ e' ->
-  TY Γ ⊢ᵦ e' : A.
-Proof.
-  intros [H ?]%step_beta_preservation.
-  now apply H.
-Qed.
-
-
-
-Lemma beta_preservation' Γ e A e':
-  TY Γ ⊢ᵦ e : A ->
-  e →ᵦₙ e' ->
-  TY Γ ⊢ᵦ e' : A.
-Proof.
-  intros HTy Hstep.
-  destruct Hstep as [e'' [Hbeta Hnorm]].
-  destruct Hbeta as [K e1 e2 -> -> Hstep].
-  revert e2 Hstep e' Hnorm.
-  dependent induction HTy;intros e2 Hstep e' Hnorm;cbn in *.
-  all: try now (destruct K;cbn in *;inversion x;subst;inversion Hstep).
-  - (* Pi *)
-    destruct K;cbn in *;inversion x;subst.
+      * eapply IHHTy2;eapply beta_fill_step;eauto.
+  }
+  { (* Lam *)
+    destruct K;cbn in *;inversion H;subst.
     + inversion Hstep.
     + (* step in Type *)
       assert (
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
-        e' = Pi x1 Ke2' U0
+        e' = Lam x0 Ke2' f U0 e0
       ) as [Ke2' [HKe2norm ->]] by admit.
-      eapply beta_typed_pi.
+      eapply beta_typed_conv.
+      eapply beta_typed_lam.
       * eapply IHHTy1;eauto.
-      * (* step in context *)
-        admit. (* TODO: 2 *)
+      * apply IHHTy2;eauto.
+      * apply IHHTy3;eauto.
+      * apply IHHTy4;eauto.
+      * admit. (* Beta *)
     + (* step in codom *)
       assert (
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
-        e' = Pi x1 T0 Ke2'
-      ) as [Ke2' [HKe2norm ->]] by admit.
-      eapply beta_typed_pi.
-      * eassumption.
-      * eapply IHHTy2;eauto.
-  - (* Lam *)
-    destruct K;cbn in *;inversion x;subst.
-    + inversion Hstep.
-    + (* step in Type *)
-      assert (
-        exists Ke2',
-        fill K e2 →ₙ Ke2' /\
-        e' = Lam x1 Ke2' f U0 e0
+        e' = Lam x0 T0 f Ke2' e0
       ) as [Ke2' [HKe2norm ->]] by admit.
       eapply beta_typed_conv.
       eapply beta_typed_lam;eauto.
-      1-3: admit. (* step in context *)
-      admit. (* beta conversion *)
-    + (* step in codom *)
-      assert (
-        exists Ke2',
-        fill K e2 →ₙ Ke2' /\
-        e' = Lam x1 T0 f Ke2' e0
-      ) as [Ke2' [HKe2norm ->]] by admit.
-      eapply beta_typed_conv.
-      eapply beta_typed_lam;eauto.
+      * apply IHHTy2;eauto.
       * eapply beta_typed_conv.
         1: eassumption.
         admit. (* beta conversion *)
@@ -1180,11 +1151,13 @@ Proof.
       assert (
         exists Ke2',
         fill K e2 →ₙ Ke2' /\
-        e' = Lam x1 T0 f U0 Ke2'
+        e' = Lam x0 T0 f U0 Ke2'
       ) as [Ke2' [HKe2norm ->]] by admit.
-      eapply beta_typed_lam;eauto.
-  - (* App *)
-    destruct K;cbn in *;inversion x;subst.
+      eapply beta_typed_lam;eauto. 
+      apply IHHTy4;eauto.
+  }
+  { (* App *)
+    destruct K;cbn in *;inversion H0;subst.
     (* case left *)
     2: {
       (* maybe normalize evaluates redex *)
@@ -1217,33 +1190,32 @@ Proof.
 
       (* inversion Hstep';subst. *)
       pose proof beta_typed_substitutivity.
-      specialize (H0 elam v2 Γ x1).
-      specialize (H0 T).
-      assert(TY (insert_name x1 T Γ) ⊢ᵦ elam : U0) as Htyelam by admit.
+      specialize (H1 elam v2 Γ x0).
+      specialize (H1 T).
+      assert(TY (insert_name x0 T Γ) ⊢ᵦ elam : U0) as Htyelam by admit.
       (* assert (x=x0) as ->.  {
         inversion HTy1;eauto.
         admit.
       } *)
-      specialize (H0 U0 Γ).
+      specialize (H1 U0 Γ).
 
       inversion Hty;subst.
       2: {
         admit. (* TODO: subst in elam is typed *)
       }
-      inversion H3;subst.
-      2: {
-        admit. (* TODO: beta case *)
-      }
-      eapply H0;eauto.
-      1: admit. (* TODO: normalize on normalized values *)
-      admit. (* env subst *)
+      eapply H1;eauto.
+      + admit. (* subst on normalized values is normalized *)
+      + inversion H8;subst.
+        2: { admit. }
+        assumption.
+      + admit. (* gamma relation *)
     }
     (* case right *)
     2: {
       assert(exists Ke2',
         fill K e2 →ₙ Ke2'
       ) as [Ke2' HKe2norm] by admit.
-      assert (exists Ue2', subst' x0 Ke2' U →ₙ Ue2') as [Ue2' HUe2norm] by admit.
+      assert (exists Ue2', subst' x Ke2' U →ₙ Ue2') as [Ue2' HUe2norm] by admit.
       assert (TY Γ ⊢ᵦ e0 Ke2' : U') as Hty.
       {
         eapply beta_typed_conv with (A:=Ue2').
@@ -1255,35 +1227,46 @@ Proof.
       }
       admit. (* toplevel case *)
     }
-    (* admit. *)
-    (* case toplevel *)
-    (* assert (K=HoleCtx) as -> by admit. *)
-    (* simpl in *.
-    subst. *)
     inversion Hstep;subst.
     pose proof beta_typed_substitutivity.
-    specialize (H1 elam eT Γ x).
-    specialize (H1 T).
-    (* assert(exists B',
-      TY (insert_name x T Γ) ⊢ᵦ elam : B'
-    ) as [B' Htyelam] by admit. *)
-    assert(TY (insert_name x T Γ) ⊢ᵦ elam : U) as Htyelam by admit.
+    specialize (H0 elam eT Γ x).
+    specialize (H0 T).
     assert (x=x0) as ->.  {
       inversion HTy1;subst;eauto.
       admit. (* type conversion case *)
     }
-    specialize (H1 U Γ e').
-    eapply H1;eauto.
-    admit. (* subst in env *)
-    (* inversion HTy1;subst. *) 
-    (* we have problem to know norm result *)
-  - (* equiv *)
+    assert(TY (insert_name x0 T Γ) ⊢ᵦ elam : U) as Htyelam. 
+    {
+      (* clear H H0 Hstep H1 Hnorm IHHTy1 IHHTy2 HTy2. *)
+      inversion HTy1;subst.
+      2: {
+        admit.
+        (* type conversion case => *)
+      }
+      assumption.
+    }
+    specialize (H0 U Γ e').
+    eapply H0;eauto.
+    admit. (* 
+      subst does not change expressions
+    *)
+  } 
+  { (* equiv *)
     eapply beta_typed_conv.
     1: {
-      eapply IHHTy.
-      all: try eassumption.
-      reflexivity.
+      eapply IHHTy; eauto.
     }
     assumption.
+  }
 Admitted.
+
+
+Corollary beta_preservation Γ e A e':
+  TY Γ ⊢ᵦ e : A ->
+  e →ᵦₙ e' ->
+  TY Γ ⊢ᵦ e' : A.
+Proof.
+  intros [H ?]%step_beta_preservation.
+  now apply H.
+Qed.
 
